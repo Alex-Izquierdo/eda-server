@@ -18,10 +18,67 @@ from django.db import models
 
 from aap_eda.core.enums import RestartPolicy
 
-__all__ = "Source"
+from .mixins import RulebookProcessParent
+from .user import User
+
+__all__ = ["Source"]
 
 
-class Source(models.Model):
+class Source(RulebookProcessParent, models.Model):
+    """Model for source listener."""
+
+    name = models.TextField(null=False, unique=True)
+    description = models.TextField(default="")
+    is_enabled = models.BooleanField(default=True)
+    decision_environment = models.ForeignKey(
+        "DecisionEnvironment",
+        on_delete=models.SET_NULL,
+        null=True,
+    )
+    # TODO(alex): this field should be mandatory.
+    rulebook = models.ForeignKey(
+        "Rulebook",
+        on_delete=models.SET_NULL,
+        null=True,
+    )
+    extra_var = models.ForeignKey(
+        "ExtraVar",
+        on_delete=models.CASCADE,
+        null=True,
+    )
+    restart_policy = models.TextField(
+        choices=RestartPolicy.choices(),
+        default=RestartPolicy.ON_FAILURE,
+    )
+    current_job_id = models.TextField(null=True)
+    restart_count = models.IntegerField(default=0)
+    failure_count = models.IntegerField(default=0)  # internal, since last good
+    rulebook_name = models.TextField(
+        null=False,
+        help_text="Name of the referenced rulebook",
+        default="",
+    )
+    rulebook_rulesets = models.TextField(
+        null=False,
+        help_text="Content of the last referenced rulebook",
+        default="",
+    )
+    ruleset_stats = models.JSONField(default=dict)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=False)
+    created_at = models.DateTimeField(auto_now_add=True, null=False)
+    modified_at = models.DateTimeField(auto_now=True, null=False)
+    latest_instance = models.OneToOneField(
+        "ActivationInstance",
+        null=True,
+        default=None,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    uuid = models.UUIDField(default=uuid.uuid4)
+    type = models.TextField(null=False)
+    args = models.JSONField(null=True, default=None)
+    listener_args = models.JSONField(null=True, default=None)
+
     class Meta:
         db_table = "core_source"
         indexes = [
@@ -29,23 +86,5 @@ class Source(models.Model):
             models.Index(fields=["name"], name="ix_source_name"),
         ]
 
-    uuid = models.UUIDField(default=uuid.uuid4)
-    type = models.TextField(null=False)
-    name = models.TextField(null=False, unique=True)
-    args = models.JSONField(null=True, default=None)
-    listener_args = models.JSONField(null=True, default=None)
-    restart_policy = models.TextField(
-        choices=RestartPolicy.choices(),
-        default=RestartPolicy.ON_FAILURE,
-    )
-    is_enabled = models.BooleanField(default=True)
-
-    listener_activation = models.ForeignKey(
-        "Activation", on_delete=models.SET_NULL, null=True
-    )
-    decision_environment = models.ForeignKey(
-        "DecisionEnvironment", on_delete=models.SET_NULL, null=True
-    )
-    user = models.ForeignKey("User", on_delete=models.CASCADE, null=False)
-    created_at = models.DateTimeField(auto_now_add=True, null=False)
-    modified_at = models.DateTimeField(auto_now=True, null=False)
+    def __str__(self):
+        return f"{self.name} ({self.id})"

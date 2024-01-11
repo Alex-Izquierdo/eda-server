@@ -152,18 +152,6 @@ class ActivationManager:
         self.db_instance.save(update_fields=["restart_count", "modified_at"])
 
     @run_with_lock
-    def _set_activation_status(
-        self,
-        status: ActivationStatus,
-        status_message: tp.Optional[str] = None,
-    ) -> None:
-        """Set the status from the manager."""
-        kwargs = {"status": status}
-        if status_message:
-            kwargs["status_message"] = status_message
-        self.db_instance.update_status(**kwargs)
-
-    @run_with_lock
     def _check_start_prerequirements(self) -> None:
         """Check if the activation can be started."""
         disallowed_statuses = [
@@ -244,8 +232,6 @@ class ActivationManager:
         Update the status of the activation, latest instance, logs,
         counters and pod id.
         """
-        self._set_activation_status(ActivationStatus.STARTING)
-
         # Ensure status of previous instances
         # For consistency, we should not have previous instances in
         # wrong status. If we create a new instance, it means that
@@ -281,8 +267,8 @@ class ActivationManager:
                 f"Reason: Container request is not valid."
                 f"Errors: {exc.errors()}"
             )
+            LOGGER.error(msg)
             self._error_instance(msg)
-            self._error_activation(msg)
             raise exceptions.ActivationStartError(msg) from exc
         except engine_exceptions.ContainerImagePullError as exc:
             msg = (
@@ -297,7 +283,7 @@ class ActivationManager:
                 f"Reason: {exc}"
             )
             self._error_instance(msg)
-            self._error_activation(msg)
+            LOGGER.error(msg)
             raise exceptions.ActivationStartError(msg) from exc
         except Exception as exc:
             msg = (
@@ -305,11 +291,10 @@ class ActivationManager:
                 f"due to an un expected error. Msg: {exc}"
             )
             self._error_instance(msg)
-            self._error_activation(msg)
+            LOGGER.error(msg)
             raise exceptions.ActivationStartError(msg) from exc
 
         # update status
-        self._set_activation_status(ActivationStatus.RUNNING)
         self._set_latest_instance_status(ActivationStatus.RUNNING)
         self._set_activation_pod_id(pod_id=container_id)
         self._reset_failure_count()
@@ -443,11 +428,6 @@ class ActivationManager:
             )
             container_logger.write(user_msg, flush=True)
             self._fail_instance(user_msg)
-            self._set_activation_status(
-                ActivationStatus.FAILED,
-                user_msg,
-            )
-
         else:
             LOGGER.info(
                 f"Activation id: {self.db_instance.id} "
@@ -461,10 +441,6 @@ class ActivationManager:
             )
             container_logger.write(user_msg, flush=True)
             self._fail_instance(msg=user_msg)
-            self._set_activation_status(
-                ActivationStatus.FAILED,
-                user_msg,
-            )
             system_restart_activation(self.db_instance.id, delay_seconds=1)
 
     def _missing_container_policy(self):
@@ -483,7 +459,6 @@ class ActivationManager:
             )
             LOGGER.error(msg)
             # Alex: Not sure if we want to change the status here.
-            self._set_activation_status(ActivationStatus.ERROR, msg)
             raise exceptions.ActivationMonitorError(msg) from exc
 
         if self.db_instance.restart_policy == RestartPolicy.NEVER:
@@ -491,11 +466,6 @@ class ActivationManager:
         else:
             msg += " Restart policy is applied."
             system_restart_activation(self.db_instance.id, delay_seconds=1)
-
-        self._set_activation_status(
-            ActivationStatus.FAILED,
-            msg,
-        )
         container_logger.write(msg, flush=True)
 
     def _completed_policy(self, container_msg: str):
@@ -527,10 +497,6 @@ class ActivationManager:
                 ActivationStatus.COMPLETED,
                 user_msg,
             )
-            self._set_activation_status(
-                ActivationStatus.COMPLETED,
-                user_msg,
-            )
             system_restart_activation(
                 self.db_instance.id,
                 delay_seconds=settings.ACTIVATION_RESTART_SECONDS_ON_COMPLETE,
@@ -548,10 +514,6 @@ class ActivationManager:
             if container_msg:
                 user_msg = f"{container_msg} {user_msg}"
             self._set_latest_instance_status(
-                ActivationStatus.COMPLETED,
-                user_msg,
-            )
-            self._set_activation_status(
                 ActivationStatus.COMPLETED,
                 user_msg,
             )
@@ -576,10 +538,6 @@ class ActivationManager:
             container_logger.write(user_msg, flush=True)
             try:
                 self._fail_instance(user_msg)
-                self._set_activation_status(
-                    ActivationStatus.FAILED,
-                    user_msg,
-                )
             except engine_exceptions.ContainerCleanupError as exc:
                 msg = (
                     f"Activation {self.db_instance.id} failed to cleanup. "
@@ -588,7 +546,6 @@ class ActivationManager:
                 LOGGER.error(msg)
                 # Alex: Not sure if we want to change the status here.
                 self._error_instance(msg)
-                self._set_activation_status(ActivationStatus.ERROR, msg)
                 raise exceptions.ActivationMonitorError(msg) from exc
 
         # No restart if it has reached the maximum number of restarts
@@ -611,10 +568,6 @@ class ActivationManager:
             container_logger.write(user_msg, flush=True)
             try:
                 self._fail_instance(user_msg)
-                self._set_activation_status(
-                    ActivationStatus.FAILED,
-                    user_msg,
-                )
             except engine_exceptions.ContainerCleanupError as exc:
                 msg = (
                     f"Activation {self.db_instance.id} failed to cleanup. "
@@ -623,7 +576,6 @@ class ActivationManager:
                 LOGGER.error(msg)
                 # Alex: Not sure if we want to change the status here.
                 self._error_instance(msg)
-                self._set_activation_status(ActivationStatus.ERROR, msg)
                 raise exceptions.ActivationMonitorError(msg) from exc
         # Restart
         else:
@@ -643,10 +595,6 @@ class ActivationManager:
             container_logger.write(user_msg, flush=True)
             try:
                 self._fail_instance(user_msg)
-                self._set_activation_status(
-                    ActivationStatus.FAILED,
-                    user_msg,
-                )
             except engine_exceptions.ContainerCleanupError as exc:
                 msg = (
                     f"Activation {self.db_instance.id} failed to cleanup. "
@@ -654,7 +602,6 @@ class ActivationManager:
                 )
                 LOGGER.error(msg)
                 # Alex: Not sure if we want to change the status here.
-                self._set_activation_status(ActivationStatus.ERROR, msg)
                 self._set_latest_instance_status(
                     ActivationStatus.ERROR,
                     msg,
@@ -690,16 +637,12 @@ class ActivationManager:
         self._set_latest_instance_status(ActivationStatus.ERROR, **kwargs)
         self._set_activation_pod_id(pod_id=None)
 
-    def _stop_instance(self):
+    def _stop_instance(self, msg: tp.Optional[str] = None):
         """Stop the latest activation instance."""
-        self._set_latest_instance_status(ActivationStatus.STOPPING)
+        self._set_latest_instance_status(ActivationStatus.STOPPING, msg)
         self._cleanup()
-        self._set_latest_instance_status(ActivationStatus.STOPPED)
+        self._set_latest_instance_status(ActivationStatus.STOPPED, msg)
         self._set_activation_pod_id(pod_id=None)
-
-    def _error_activation(self, msg: str):
-        LOGGER.error(msg)
-        self._set_activation_status(ActivationStatus.ERROR, msg)
 
     def start(self, is_restart: bool = False):
         """Start an activation.
@@ -764,12 +707,11 @@ class ActivationManager:
                 f"Stop operation activation id: {self.db_instance.id} "
                 "No instance found.",
             )
-            self._set_activation_status(ActivationStatus.STOPPED)
             return
 
+        user_msg = "Stop requested by user."
         try:
-            self._set_activation_status(ActivationStatus.STOPPING)
-            self._stop_instance()
+            self._stop_instance(user_msg)
 
         except engine_exceptions.ContainerEngineError as exc:
             msg = (
@@ -777,10 +719,10 @@ class ActivationManager:
                 f"Reason: {exc}"
             )
             # Alex: Not sure if we want to change the status here.
-            self._error_activation(msg)
+            LOGGER.error(msg)
+            self._error_instance(msg)
             raise exceptions.ActivationStopError(msg) from exc
-        user_msg = "Stop requested by user."
-        self._set_activation_status(ActivationStatus.STOPPED, user_msg)
+
         container_logger = self.container_logger_class(self.latest_instance.id)
         container_logger.write(user_msg, flush=True)
         LOGGER.info(
@@ -803,7 +745,6 @@ class ActivationManager:
             "Activation restart scheduled for 1 second.",
         )
         user_msg = "Restart requested by user. "
-        self._set_activation_status(ActivationStatus.PENDING, user_msg)
         container_logger.write(user_msg, flush=True)
         system_restart_activation(self.db_instance.id, delay_seconds=1)
 
@@ -877,11 +818,9 @@ class ActivationManager:
             self._check_latest_instance_and_pod_id()
         except exceptions.ActivationInstanceNotFound as e:
             LOGGER.error(f"Monitor operation Failed: {e}")
-            self._error_activation(f"{e}")
             raise exceptions.ActivationMonitorError(f"{e}")
         except exceptions.ActivationInstancePodIdNotFound as e:
             LOGGER.error(f"Monitor operation Failed: {e}")
-            self._error_activation(f"{e}")
             self._error_instance(f"{e}")
             raise exceptions.ActivationMonitorError(f"{e}")
 
@@ -969,7 +908,6 @@ class ActivationManager:
             LOGGER.error(msg)
             self._cleanup()
             self._error_instance(msg)
-            self._error_activation(msg)
             raise exceptions.ActivationMonitorError(msg)
 
         # we don't expect stopping status for the container
@@ -1030,7 +968,6 @@ class ActivationManager:
                 f"Activation {self.db_instance.id} failed to create "
                 f"activation instance. Reason: {exc}"
             )
-            self._error_activation(msg)
             raise exceptions.ActivationStartError(msg) from exc
 
     def _build_container_request(self) -> ContainerRequest:

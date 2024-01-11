@@ -27,6 +27,7 @@ from aap_eda.core.exceptions import (
     UpdateFieldsRequiredError,
 )
 
+from .mixins import RulebookProcessParent
 from .source import Source
 from .user import User
 
@@ -37,11 +38,8 @@ __all__ = (
 )
 
 
-class Activation(models.Model):
-    class Meta:
-        db_table = "core_activation"
-        indexes = [models.Index(fields=["name"], name="ix_activation_name")]
-        ordering = ("-created_at",)
+class Activation(RulebookProcessParent, models.Model):
+    """Model for Rulebook activations."""
 
     name = models.TextField(null=False, unique=True)
     description = models.TextField(default="")
@@ -66,14 +64,9 @@ class Activation(models.Model):
         choices=RestartPolicy.choices(),
         default=RestartPolicy.ON_FAILURE,
     )
-    status = models.TextField(
-        choices=ActivationStatus.choices(),
-        default=ActivationStatus.PENDING,
-    )
     current_job_id = models.TextField(null=True)
     restart_count = models.IntegerField(default=0)
     failure_count = models.IntegerField(default=0)  # internal, since last good
-    is_valid = models.BooleanField(default=False)  # internal, passed first run
     # TODO(alex): name and rulesets should be populated in the model, not in
     # the serializer.
     rulebook_name = models.TextField(
@@ -88,8 +81,6 @@ class Activation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=False)
     created_at = models.DateTimeField(auto_now_add=True, null=False)
     modified_at = models.DateTimeField(auto_now=True, null=False)
-    status_updated_at = models.DateTimeField(null=True)
-    status_message = models.TextField(null=True, default=None)
     latest_instance = models.OneToOneField(
         "ActivationInstance",
         null=True,
@@ -102,79 +93,17 @@ class Activation(models.Model):
         default=None,
     )
 
-    def save(self, *args, **kwargs):
-        # when creating
-        if self._state.adding:
-            if self.status_message is None:
-                self._set_status_message()
-        else:
-            if not bool(kwargs) or "update_fields" not in kwargs:
-                raise UpdateFieldsRequiredError(
-                    "update_fields is required to use when saving "
-                    "due to race conditions"
-                )
-            else:
-                if "status" in kwargs["update_fields"]:
-                    self._is_valid_status()
+    class Meta:
+        db_table = "core_activation"
+        indexes = [models.Index(fields=["name"], name="ix_activation_name")]
+        ordering = ("-created_at",)
 
-            if (
-                "status_message" in kwargs["update_fields"]
-                and "status" not in kwargs["update_fields"]
-            ):
-                raise StatusRequiredError(
-                    "status_message cannot be set by itself, "
-                    "it requires status and status_message together"
-                )
-            # when updating without status_message
-            elif (
-                "status" in kwargs["update_fields"]
-                and "status_message" not in kwargs["update_fields"]
-            ):
-                self._set_status_message()
-                kwargs["update_fields"].append("status_message")
-
-        super().save(*args, **kwargs)
-
-    def _set_status_message(self):
-        self.status_message = self._get_default_status_message()
-
-        if self.status == ActivationStatus.PENDING and not self.is_enabled:
-            self.status_message = "Activation is marked as disabled"
-
-    def _get_default_status_message(self):
-        try:
-            return ACTIVATION_STATUS_MESSAGE_MAP[self.status]
-        except KeyError:
-            raise UnknownStatusError(f"Status [{self.status}] is invalid")
-
-    def _is_valid_status(self):
-        try:
-            ActivationStatus(self.status)
-        except ValueError as error:
-            raise UnknownStatusError(error)
-
-    def update_status(
-        self, status: ActivationStatus, status_message: tp.Optional[str] = None
-    ) -> None:
-        self.status = status
-        self.status_updated_at = models.functions.Now()
-        update_fields = [
-            "status",
-            "status_updated_at",
-            "modified_at",
-        ]
-        if status_message:
-            self.status_message = status_message
-            update_fields.append("status_message")
-        self.save(
-            update_fields=update_fields,
-        )
+    def __str__(self):
+        return f"{self.name} ({self.id})"
 
 
 class ActivationInstance(models.Model):
-    class Meta:
-        db_table = "core_activation_instance"
-        ordering = ("-started_at",)
+    """Model for activation instances."""
 
     name = models.TextField(null=False, default="")
     status = models.TextField(
@@ -182,22 +111,49 @@ class ActivationInstance(models.Model):
         default=ActivationStatus.PENDING,
     )
     git_hash = models.TextField(null=False, default="")
-    activation = models.ForeignKey("Activation", on_delete=models.CASCADE)
+
+    # Source and activation will be completely different models
+    # Since for now are only two, two foreign keys are enough
+    # If more are added, a generic relation might be considered
+    # In this way the relation is clear and simple without the
+    # tradeoffs of a generic relation
+    activation = models.ForeignKey(
+        "Activation",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="activation_processes",
+    )
+    source = models.ForeignKey(
+        "Source",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="source_processes",
+    )
     started_at = models.DateTimeField(auto_now_add=True, null=False)
     updated_at = models.DateTimeField(null=True)
     ended_at = models.DateTimeField(null=True)
     activation_pod_id = models.TextField(null=True)
     status_message = models.TextField(null=True, default=None)
     log_read_at = models.DateTimeField(null=True)
+    status_updated_at = models.DateTimeField(null=True)
+
+    class Meta:
+        db_table = "core_activation_instance"
+        ordering = ("-started_at",)
+
+    def __str__(self):
+        return f"{self.name} ({self.id})"
 
     def save(self, *args, **kwargs):
         # when creating
         if self._state.adding:
+            # populate latest_instance of activation at creation
+            self.activation.latest_instance = self
+
             if self.status_message is None:
                 self.status_message = self._get_default_status_message()
-
-                # populate latest_instance of activation at creation
-                self.activation.latest_instance = self
         else:
             if not bool(kwargs) or "update_fields" not in kwargs:
                 raise UpdateFieldsRequiredError(

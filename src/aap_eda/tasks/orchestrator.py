@@ -105,10 +105,14 @@ def _run_request(
 
 
 def _can_start_new_activation(activation: models.Activation) -> bool:
-    num_running_activations = models.Activation.objects.filter(
-        status__in=[ActivationStatus.RUNNING, ActivationStatus.STARTING],
-    ).count()
-    if num_running_activations >= settings.MAX_RUNNING_ACTIVATIONS:
+    running_activations = [
+        activation
+        for activation in models.Activation.objects.all()
+        if activation.status
+        in [ActivationStatus.RUNNING, ActivationStatus.STARTING]
+    ]
+
+    if len(running_activations) >= settings.MAX_RUNNING_ACTIVATIONS:
         LOGGER.info(
             "No capacity to start a new activation. "
             f"Activation {activation.id} is postponed",
@@ -162,8 +166,12 @@ def monitor_activations() -> None:
         unique_enqueue("activation", job_id, _manage, activation_id)
 
     # monitor running instances
-    for activation in models.Activation.objects.filter(
-        status=ActivationStatus.RUNNING,
-    ):
+    running_activations = [
+        activation
+        for activation in models.Activation.objects.all()
+        if activation.status == ActivationStatus.RUNNING
+    ]
+
+    for activation in running_activations:
         job_id = _manage_activation_job_id(activation.id)
         unique_enqueue("activation", job_id, _manage, activation.id)

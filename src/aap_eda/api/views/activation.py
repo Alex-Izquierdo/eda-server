@@ -117,8 +117,6 @@ class ActivationViewSet(
         return self.get_paginated_response(result)
 
     def perform_destroy(self, activation):
-        activation.status = ActivationStatus.DELETING
-        activation.save(update_fields=["status"])
         logger.info(f"Now deleting {activation.name} ...")
         delete_activation(activation_id=activation.id)
 
