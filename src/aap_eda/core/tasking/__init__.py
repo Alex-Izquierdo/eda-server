@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable, Optional, Protocol, Type, Union
 
+from django.conf import settings
 from django_rq import enqueue, get_queue, get_scheduler, job
 from rq import Connection, Queue as _Queue, Worker as _Worker
 from rq.defaults import (
@@ -175,8 +176,10 @@ class ActivationWorker(_Worker):
         if serializer is None:
             serializer = JSONSerializer
 
+        queue_name = settings.RULEBOOK_QUEUE_NAME
+
         super().__init__(
-            [Queue(name="activation", connection=connection)],
+            [Queue(name=queue_name, connection=connection)],
             name,
             default_result_ttl,
             connection,
