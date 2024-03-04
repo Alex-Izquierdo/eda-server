@@ -314,10 +314,10 @@ RQ_UNIX_SOCKET_PATH = settings.get("MQ_UNIX_SOCKET_PATH", None)
 
 # A list of queues to be used in multinode mode
 # If the list is empty, the single node mode is used
-WORKERS_RULEBOOK_QUEUES = settings.get("WORKERS_RULEBOOK_QUEUES", [])
-if isinstance(WORKERS_RULEBOOK_QUEUES, str):
-    WORKERS_RULEBOOK_QUEUES = WORKERS_RULEBOOK_QUEUES.split(",")
-PODMAN_MULTINODE_ENABLED = bool(WORKERS_RULEBOOK_QUEUES)
+RULEBOOK_WORKERS_QUEUES = settings.get("RULEBOOK_WORKERS_QUEUES", [])
+if isinstance(RULEBOOK_WORKERS_QUEUES, str):
+    RULEBOOK_WORKERS_QUEUES = RULEBOOK_WORKERS_QUEUES.split(",")
+PODMAN_MULTINODE_ENABLED = bool(RULEBOOK_WORKERS_QUEUES)
 
 DEFAULT_QUEUE_TIMEOUT = 300
 DEFAULT_RULEBOOK_QUEUE_TIMEOUT = 120
@@ -349,7 +349,7 @@ def get_rq_queues() -> dict:
 
     # Configures the activation queue in multinode mode
     if DEPLOYMENT_TYPE == "podman" and PODMAN_MULTINODE_ENABLED:
-        for queue in WORKERS_RULEBOOK_QUEUES:
+        for queue in RULEBOOK_WORKERS_QUEUES:
             queues[queue] = {
                 "HOST": settings.get("MQ_HOST", "localhost"),
                 "PORT": settings.get("MQ_PORT", 6379),
