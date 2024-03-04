@@ -25,11 +25,15 @@ from aap_eda.core.enums import (
     ProcessParentType,
 )
 from aap_eda.core.models import Activation, ActivationRequestQueue, EventStream
-from aap_eda.core.tasking import unique_enqueue
+from aap_eda.core.tasking import unique_enqueue, Queue
 from aap_eda.services.activation import exceptions
 from aap_eda.services.activation.manager import ActivationManager
+from django.conf import settings
+from django_rq import get_queue
+from collections import Counter
 
 LOGGER = logging.getLogger(__name__)
+PODMAN_MULTINODE_ENABLED = settings.PODMAN_MULTINODE_ENABLED
 
 
 def _manage_process_job_id(process_parent_type: str, id: int) -> str:
@@ -121,43 +125,139 @@ def _run_request(
     return True
 
 
-def _make_user_request(
+class QueueNotFoundError(Exception):
+    """Raised when a queue is not found."""
+
+    ...
+
+
+class RequestDispatcher:
+    _queues = None
+
+    @classmethod
+    @property
+    def queues(cls):
+        if cls._queues is None:
+            cls._queues = cls.get_queues()
+        return cls._queues
+
+    @staticmethod
+    def dispatch(
+        process_parent_type: ProcessParentType,
+        process_id: int,
+        request_type: ActivationRequest,
+    ):
+        requests_queue.push(process_parent_type, process_id, request_type)
+        job_id = _manage_process_job_id(process_parent_type, process_id)
+        queue_name = "activation"
+
+        if PODMAN_MULTINODE_ENABLED:
+            if request_type in [
+                ActivationRequest.START,
+                ActivationRequest.AUTO_START,
+            ]:
+                queue_name = RequestDispatcher.get_most_free_queue()
+            else:
+                queue_name = RequestDispatcher.get_queue_name_by_process_id(
+                    process_id,
+                )
+
+        unique_enqueue(
+            queue_name,
+            job_id,
+            _manage,
+            process_parent_type,
+            process_id,
+        )
+
+    @staticmethod
+    def get_queues() -> list[Queue]:
+        queues = []
+        for queue_name in settings.RULEBOOK_WORKERS_QUEUES:
+            try:
+                queues.append(get_queue(queue_name))
+            except KeyError:
+                LOGGER.exception(f"Queue {queue_name} not found")
+                raise QueueNotFoundError(
+                    f"Queue {queue_name} not found"
+                ) from None
+
+        return queues
+
+    @staticmethod
+    def get_most_free_queue_name() -> str:
+        if not RequestDispatcher.queues:
+            raise QueueNotFoundError("No queues found")
+
+        queue_counter = Counter()
+
+        for queue in RequestDispatcher.queues:
+            running_processes_count = models.RulebookProcess.objects.filter(
+                status=ActivationStatus.RUNNING,
+                processqueue__queue_name=queue.name,
+            ).count()
+            queue_counter[queue.name] = running_processes_count
+        return queue_counter.most_common()[-1][0]
+
+    @staticmethod
+    def get_queue_name_by_process_id(process_id: int) -> str:
+        try:
+            process = models.RulebookProcess.objects.get(id=process_id)
+            return process.processqueue.queue_name
+        except models.RulebookProcess.DoesNotExist:
+            raise ValueError(f"No RulebookProcess found with ID {process_id}")
+        except models.ProcessQueue.DoesNotExist:
+            raise ValueError(
+                f"No Queue associated with RulebookProcess ID {process_id}"
+            )
+
+
+# TODO(alex): rename id to process_id to avoid shadowing the built-in id
+def start_rulebook_process(
     process_parent_type: ProcessParentType,
     id: int,
-    request_type: ActivationRequest,
-) -> None:
-    """Enqueue a task to manage the activation with the given id."""
-    requests_queue.push(process_parent_type, id, request_type)
-    job_id = _manage_process_job_id(process_parent_type, id)
-    unique_enqueue("activation", job_id, _manage, process_parent_type, id)
-
-
-def start_rulebook_process(
-    process_parent_type: ProcessParentType, id: int
 ) -> None:
     """Create a request to start the activation with the given id."""
-    _make_user_request(process_parent_type, id, ActivationRequest.START)
+    RequestDispatcher.dispatch(
+        process_parent_type,
+        id,
+        ActivationRequest.START,
+    )
 
 
+# TODO(alex): rename id to process_id to avoid shadowing the built-in id
 def stop_rulebook_process(
-    process_parent_type: ProcessParentType, id: int
+    process_parent_type: ProcessParentType,
+    id: int,
 ) -> None:
     """Create a request to stop the activation with the given id."""
-    _make_user_request(process_parent_type, id, ActivationRequest.STOP)
+    RequestDispatcher.dispatch(process_parent_type, id, ActivationRequest.STOP)
 
 
+# TODO(alex): rename id to process_id to avoid shadowing the built-in id
 def delete_rulebook_process(
-    process_parent_type: ProcessParentType, id: int
+    process_parent_type: ProcessParentType,
+    id: int,
 ) -> None:
     """Create a request to delete the activation with the given id."""
-    _make_user_request(process_parent_type, id, ActivationRequest.DELETE)
+    RequestDispatcher.dispatch(
+        process_parent_type,
+        id,
+        ActivationRequest.DELETE,
+    )
 
 
+# TODO(alex): rename id to process_id to avoid shadowing the built-in id
 def restart_rulebook_process(
-    process_parent_type: ProcessParentType, id: int
+    process_parent_type: ProcessParentType,
+    id: int,
 ) -> None:
     """Create a request to restart the activation with the given id."""
-    _make_user_request(process_parent_type, id, ActivationRequest.RESTART)
+    RequestDispatcher.dispatch(
+        process_parent_type,
+        id,
+        ActivationRequest.RESTART,
+    )
 
 
 def monitor_rulebook_processes() -> None:
