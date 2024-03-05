@@ -4,6 +4,18 @@ import django.db.models.deletion
 from django.db import migrations, models
 
 
+def populate_rulebook_process_queue(apps, schema_editor):
+    RulebookProcessQueue = apps.get_model("core", "RulebookProcessQueue")
+    RulebookProcess = apps.get_model("core", "RulebookProcess")
+    for running_process in RulebookProcess.objects.filter(
+        status="RUNNING"
+    ).all():
+        RulebookProcessQueue.objects.create(
+            queue_name="activation",
+            process=running_process,
+        )
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("core", "0026_activation_log_level_eventstream_log_level"),
@@ -32,5 +44,9 @@ class Migration(migrations.Migration):
                     )
                 ],
             },
+        ),
+        migrations.RunPython(
+            populate_rulebook_process_queue,
+            reverse_code=migrations.RunPython.noop,
         ),
     ]

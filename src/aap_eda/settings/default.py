@@ -310,14 +310,19 @@ RQ = {
     "JOB_CLASS": "aap_eda.core.tasking.Job",
 }
 
+# This only takes effect if RULEBOOK_WORKER_QUEUES is not defined or
+# or it has only one queue
 RQ_UNIX_SOCKET_PATH = settings.get("MQ_UNIX_SOCKET_PATH", None)
 
 # A list of queues to be used in multinode mode
-# If the list is empty, the single node mode is used
-RULEBOOK_WORKERS_QUEUES = settings.get("RULEBOOK_WORKERS_QUEUES", [])
-if isinstance(RULEBOOK_WORKERS_QUEUES, str):
-    RULEBOOK_WORKERS_QUEUES = RULEBOOK_WORKERS_QUEUES.split(",")
-PODMAN_MULTINODE_ENABLED = bool(RULEBOOK_WORKERS_QUEUES)
+# If the list is empty, use the default singlenode queue name
+RULEBOOK_WORKER_QUEUES = settings.get("RULEBOOK_WORKER_QUEUES", [])
+if isinstance(RULEBOOK_WORKER_QUEUES, str):
+    RULEBOOK_WORKER_QUEUES = RULEBOOK_WORKER_QUEUES.split(",")
+
+# If the list is empty, use the default queue name for single node mode
+if not RULEBOOK_WORKER_QUEUES:
+    RULEBOOK_WORKER_QUEUES = ["activation"]
 
 DEFAULT_QUEUE_TIMEOUT = 300
 DEFAULT_RULEBOOK_QUEUE_TIMEOUT = 120
@@ -347,27 +352,27 @@ def get_rq_queues() -> dict:
             "DEFAULT_TIMEOUT": DEFAULT_QUEUE_TIMEOUT,
         }
 
-    # Configures the activation queue in multinode mode
-    if DEPLOYMENT_TYPE == "podman" and PODMAN_MULTINODE_ENABLED:
-        for queue in RULEBOOK_WORKERS_QUEUES:
+    # Configures the activation queue for single node mode
+    if len(RULEBOOK_WORKER_QUEUES) == 1:
+        if RQ_UNIX_SOCKET_PATH:
+            queues[RULEBOOK_WORKER_QUEUES[0]] = {
+                "UNIX_SOCKET_PATH": RQ_UNIX_SOCKET_PATH,
+                "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
+            }
+        else:
+            queues[RULEBOOK_WORKER_QUEUES[0]] = {
+                "HOST": settings.get("MQ_HOST", "localhost"),
+                "PORT": settings.get("MQ_PORT", 6379),
+                "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
+            }
+    # Configure the queues for multinode mode
+    else:
+        for queue in RULEBOOK_WORKER_QUEUES:
             queues[queue] = {
                 "HOST": settings.get("MQ_HOST", "localhost"),
                 "PORT": settings.get("MQ_PORT", 6379),
                 "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
             }
-
-    # Configures the activation queue in single node mode
-    elif RQ_UNIX_SOCKET_PATH:
-        queues["activation"] = {
-            "UNIX_SOCKET_PATH": RQ_UNIX_SOCKET_PATH,
-            "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
-        }
-    else:
-        queues["activation"] = {
-            "HOST": settings.get("MQ_HOST", "localhost"),
-            "PORT": settings.get("MQ_PORT", 6379),
-            "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
-        }
 
     for queue in queues.values():
         queue["DB"] = settings.get("MQ_DB", 0)
