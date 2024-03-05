@@ -163,7 +163,6 @@ class RequestDispatcher:
         request_type: Optional[ActivationRequest],
     ):
         # No request type means we are monitoring the process
-        # and there is no request to be processed
         if request_type:
             requests_queue.push(
                 process_parent_type,
