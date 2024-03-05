@@ -162,14 +162,6 @@ class RequestDispatcher:
         process_parent_id: int,
         request_type: Optional[ActivationRequest],
     ):
-        # No request type means we are monitoring the process
-        if request_type:
-            requests_queue.push(
-                process_parent_type,
-                process_parent_id,
-                request_type,
-            )
-
         job_id = _manage_process_job_id(process_parent_type, process_parent_id)
 
         if request_type in [
@@ -183,18 +175,13 @@ class RequestDispatcher:
                 process_parent_id,
             )
 
-            if not queue_name:
-                msg = (
-                    f"Expected queue name for {job_id} not found, "
-                    f"request_type: {request_type}"
-                )
-                LOGGER.critical(msg)
-                raise QueueNotFoundError(msg)
-
-            # If the queue is old or detached, we use a valid one
+            # If the queue is old or doesn't exist, we use a valid one
             # to make sure the request is processed and the restart
             # policy is respected
-            if queue_name not in settings.RULEBOOK_WORKER_QUEUES:
+            if (
+                not queue_name
+                or queue_name not in settings.RULEBOOK_WORKER_QUEUES
+            ):
                 queue_name = RequestDispatcher.get_most_free_queue_name()
 
         unique_enqueue(
@@ -240,7 +227,7 @@ class RequestDispatcher:
     def get_queue_name_by_parent_id(
         process_parent_type: ProcessParentType,
         process_parent_id: int,
-    ) -> str:
+    ) -> Optional[str]:
         """Return the queue name associated with the process ID."""
         try:
             parent_process = get_process_parent(
@@ -261,6 +248,8 @@ class RequestDispatcher:
                 "No Queue associated with RulebookProcess ID "
                 f"{process_parent_id}",
             ) from None
+        if not hasattr(process, "rulebookprocessqueue"):
+            return None
         return process.rulebookprocessqueue.queue_name
 
 
@@ -270,6 +259,11 @@ def start_rulebook_process(
     process_parent_id: int,
 ) -> None:
     """Create a request to start the activation with the given id."""
+    requests_queue.push(
+        process_parent_type,
+        process_parent_id,
+        ActivationRequest.START,
+    )
     RequestDispatcher.dispatch(
         process_parent_type,
         process_parent_id,
@@ -282,8 +276,15 @@ def stop_rulebook_process(
     process_parent_id: int,
 ) -> None:
     """Create a request to stop the activation with the given id."""
+    requests_queue.push(
+        process_parent_type,
+        process_parent_id,
+        ActivationRequest.STOP,
+    )
     RequestDispatcher.dispatch(
-        process_parent_type, process_parent_id, ActivationRequest.STOP
+        process_parent_type,
+        process_parent_id,
+        ActivationRequest.STOP,
     )
 
 
@@ -292,6 +293,11 @@ def delete_rulebook_process(
     process_parent_id: int,
 ) -> None:
     """Create a request to delete the activation with the given id."""
+    requests_queue.push(
+        process_parent_type,
+        process_parent_id,
+        ActivationRequest.DELETE,
+    )
     RequestDispatcher.dispatch(
         process_parent_type,
         process_parent_id,
@@ -299,12 +305,16 @@ def delete_rulebook_process(
     )
 
 
-# TODO(alex): rename id to process_id to avoid shadowing the built-in id
 def restart_rulebook_process(
     process_parent_type: ProcessParentType,
     process_parent_id: int,
 ) -> None:
     """Create a request to restart the activation with the given id."""
+    requests_queue.push(
+        process_parent_type,
+        process_parent_id,
+        ActivationRequest.RESTART,
+    )
     RequestDispatcher.dispatch(
         process_parent_type,
         process_parent_id,
