@@ -13,7 +13,7 @@
 #  limitations under the License.
 
 import logging
-from typing import Union
+from typing import Union, Optional
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -145,9 +145,10 @@ class RequestDispatcher:
     def dispatch(
         process_parent_type: ProcessParentType,
         process_id: int,
-        request_type: ActivationRequest,
+        request_type: Optional[ActivationRequest],
     ):
-        requests_queue.push(process_parent_type, process_id, request_type)
+        if request_type:
+            requests_queue.push(process_parent_type, process_id, request_type)
         job_id = _manage_process_job_id(process_parent_type, process_id)
         queue_name = "activation"
 
@@ -270,9 +271,12 @@ def monitor_rulebook_processes() -> None:
     activation.
     """
     # run pending user requests
-    for process_parent_type, id in requests_queue.list_requests():
-        job_id = _manage_process_job_id(process_parent_type, id)
-        unique_enqueue("activation", job_id, _manage, process_parent_type, id)
+    for request in requests_queue.list_requests():
+        RequestDispatcher.dispatch(
+            request.process_parent_type,
+            request.process_parent_id,
+            request.request,
+        )
 
     # monitor running instances
     for process in models.RulebookProcess.objects.filter(
@@ -280,8 +284,7 @@ def monitor_rulebook_processes() -> None:
     ):
         process_parent_type = str(process.parent_type)
         if process_parent_type == ProcessParentType.ACTIVATION:
-            id = process.activation_id
+            process_id = process.activation_id
         else:
-            id = process.event_stream_id
-        job_id = _manage_process_job_id(process_parent_type, id)
-        unique_enqueue("activation", job_id, _manage, process_parent_type, id)
+            process_id = process.event_stream_id
+        RequestDispatcher.dispatch(process_parent_type, process_id, None)
