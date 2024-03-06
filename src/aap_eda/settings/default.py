@@ -320,6 +320,11 @@ RULEBOOK_WORKER_QUEUES = settings.get("RULEBOOK_WORKER_QUEUES", [])
 if isinstance(RULEBOOK_WORKER_QUEUES, str):
     RULEBOOK_WORKER_QUEUES = RULEBOOK_WORKER_QUEUES.split(",")
 
+if len(set(RULEBOOK_WORKER_QUEUES)) != len(RULEBOOK_WORKER_QUEUES):
+    raise ImproperlyConfigured(
+        "The RULEBOOK_WORKER_QUEUES setting must not contain duplicates."
+    )
+
 # If the list is empty, use the default queue name for single node mode
 if not RULEBOOK_WORKER_QUEUES:
     RULEBOOK_WORKER_QUEUES = ["activation"]
