@@ -213,6 +213,9 @@ class RequestDispatcher:
         if not RequestDispatcher.queues:
             raise QueueNotFoundError("No queues found")
 
+        if len(RequestDispatcher.queues) == 1:
+            return RequestDispatcher.queues[0].name
+
         queue_counter = Counter()
 
         for queue in RequestDispatcher.queues:
