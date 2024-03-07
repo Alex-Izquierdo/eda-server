@@ -20,19 +20,20 @@ env:
 jobs:
   api-e2e-tests:
     if: >
-      (github.repository == 'ansible/eda-server' && github.event_name == 'workflow_dispatch') ||
-      (github.repository == 'ansible/eda-server' && github.event_name == 'pull_request_target' &&
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_target' &&
         contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          ref: >-
-            ${{
-              github.event_name == 'pull_request_target' && github.event.pull_request.head.ref
-              || github.sha
-            }}
+          ref: ${{ github.ref }}
+          # ref: >-
+          #   ${{
+          #     github.event_name == 'pull_request_target' && github.head_ref
+          #     || github.sha
+          #   }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
