@@ -25,15 +25,21 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: ubuntu-latest
     steps:
+      - name: Print github context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT" | jq
+
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          ref: ${{ github.ref }}
-          # ref: >-
-          #   ${{
-          #     github.event_name == 'pull_request_target' && github.head_ref
-          #     || github.sha
-          #   }}
+          # ref: ${{ github.ref }}
+          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository}}
+          ref: >-
+            ${{
+              github.event_name == 'pull_request_target' && github.event.pull_request.head.ref
+              || github.sha
+            }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v2
