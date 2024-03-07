@@ -20,8 +20,8 @@ env:
 jobs:
   api-e2e-tests:
     if: >
-      (github.repository == 'ansible/eda-server' && github.event_name == 'workflow_dispatch') ||
-      (github.repository == 'ansible/eda-server' && github.event_name == 'pull_request_target' &&
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'pull_request_target' &&
         contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: ubuntu-latest
     steps:
