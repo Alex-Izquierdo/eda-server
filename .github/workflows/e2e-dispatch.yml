@@ -25,6 +25,9 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'run-e2e'))
     runs-on: ubuntu-latest
     steps:
+      - name: print event
+        run: 'echo "event: ${{ github }}"'
+
       - name: Checkout
         uses: actions/checkout@v3
         with:
