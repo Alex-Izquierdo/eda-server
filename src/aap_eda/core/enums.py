@@ -123,3 +123,10 @@ class RulebookProcessLogLevel(DjangoStrEnum):
     DEBUG = "debug"
     INFO = "info"
     ERROR = "error"
+
+
+class RQQueueState(DjangoStrEnum):
+    """Types of states for an RQ queue."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"

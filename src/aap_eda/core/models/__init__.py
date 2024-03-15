@@ -25,7 +25,7 @@ from .job import (
     JobInstanceHost,
 )
 from .project import ExtraVar, Project
-from .queue import ActivationRequestQueue
+from .queue import ActivationRequestQueue, RQQueue
 from .rulebook import (
     AuditAction,
     AuditEvent,
@@ -67,4 +67,5 @@ __all__ = [
     "DecisionEnvironment",
     "ActivationRequestQueue",
     "EventStream",
+    "RQQueue",
 ]

@@ -14,7 +14,11 @@
 
 from django.db import models
 
-from aap_eda.core.enums import ActivationRequest, ProcessParentType
+from aap_eda.core.enums import (
+    ActivationRequest,
+    ProcessParentType,
+    RQQueueState,
+)
 
 
 class ActivationRequestQueue(models.Model):
@@ -39,3 +43,21 @@ class ActivationRequestQueue(models.Model):
 __all__ = [
     "ActivationRequestQueue",
 ]
+
+
+class RQQueue(models.Model):
+    """RQ Queue model.
+
+    RQ Queue is a model that represents a queue in RQ.
+    We track the state of the queue.
+    """
+
+    name = models.TextField(null=False)
+    state = models.TextField(null=False, choices=RQQueueState.choices())
+
+    class Meta:
+        db_table = "core_rq_queue"
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name

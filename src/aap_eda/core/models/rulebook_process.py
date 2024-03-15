@@ -206,7 +206,12 @@ class RulebookProcessQueue(models.Model):
     It keeps track of the queue name where the process is running.
     """
 
-    queue_name = models.CharField(max_length=255)
+    queue = models.ForeignKey(
+        "RQQueue",
+        on_delete=models.CASCADE,
+        related_name="rulebook_process_queues",
+    )
+
     process = models.OneToOneField(
         "RulebookProcess",
         on_delete=models.CASCADE,
@@ -215,10 +220,10 @@ class RulebookProcessQueue(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=["queue_name"]),
+            models.Index(fields=["queue"]),
         ]
 
     def __str__(self) -> str:
         return (
-            f"Rulebook Process id {self.process.id} in queue {self.queue_name}"
+            f"Rulebook Process id {self.process.id} in queue {self.queue.name}"
         )

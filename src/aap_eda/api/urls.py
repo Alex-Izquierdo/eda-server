@@ -74,6 +74,7 @@ v1_urls = [
     # ->
     path("", include(resource_api_urls)),
     path("", include(openapi_urls)),
+    path("django-rq/", include("django_rq.urls")),
     path("auth/session/login/", views.SessionLoginView.as_view()),
     path("auth/session/logout/", views.SessionLogoutView.as_view()),
     path(
