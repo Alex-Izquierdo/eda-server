@@ -5,16 +5,23 @@ from django.db import migrations, models
 
 
 def populate_rulebook_process_queue(apps, schema_editor):
+    RQQueue = apps.get_model("core", "RQQueue")  # noqa: N806
     RulebookProcessQueue = apps.get_model(  # noqa: N806
         "core",
         "RulebookProcessQueue",
     )
     RulebookProcess = apps.get_model("core", "RulebookProcess")  # noqa: N806
+    if not RQQueue.objects.filter(name="activation").exists():
+        RQQueue.objects.create(
+            name="activation",
+            state="available",
+        )
+    queue = RQQueue.objects.get(name="activation")
     for running_process in RulebookProcess.objects.filter(
         status="RUNNING",
     ).all():
         RulebookProcessQueue.objects.create(
-            queue_name="activation",
+            queue=queue,
             process=running_process,
         )
 

@@ -16,9 +16,7 @@ import logging
 from collections import Counter
 from typing import Optional, Union
 
-from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
-from django_rq import get_queue
 from rq import get_current_job
 
 import aap_eda.tasks.activation_request_queue as requests_queue
@@ -27,9 +25,10 @@ from aap_eda.core.enums import (
     ActivationRequest,
     ActivationStatus,
     ProcessParentType,
+    RQQueueState,
 )
 from aap_eda.core.models import Activation, ActivationRequestQueue, EventStream
-from aap_eda.core.tasking import Queue, unique_enqueue
+from aap_eda.core.tasking import unique_enqueue
 from aap_eda.services.activation import exceptions
 from aap_eda.services.activation.manager import ActivationManager
 
@@ -140,21 +139,18 @@ class QueueNotFoundError(Exception):
     ...
 
 
+class QueueNotAvailableError(Exception):
+    """Raised when a queue is not available."""
+
+    ...
+
+
 class RequestDispatcher:
     """Dispatch process requests to the activation manager.
 
     Handles the dispatch of requests for the orchestrator,
     enqueueing the RQ task in the right queue.
     """
-
-    _queues = None
-
-    @classmethod
-    @property
-    def queues(cls):
-        if cls._queues is None:
-            cls._queues = cls.get_queues()
-        return cls._queues
 
     @staticmethod
     def dispatch(
@@ -168,21 +164,44 @@ class RequestDispatcher:
             ActivationRequest.START,
             ActivationRequest.AUTO_START,
         ]:
-            queue_name = RequestDispatcher.get_most_free_queue_name()
+            try:
+                queue_name = RequestDispatcher.get_most_free_queue_name()
+            except QueueNotAvailableError:
+                msg = (
+                    "No available queues found. "
+                    f"{process_parent_type} {process_parent_id} "
+                    "is rescheduled."
+                )
+                manager = ActivationManager(
+                    get_process_parent(process_parent_type, process_parent_id),
+                )
+                manager._set_activation_status(ActivationStatus.PENDING, msg)
+                return
+
         else:
-            queue_name = RequestDispatcher.get_queue_name_by_parent_id(
+            queue = RequestDispatcher.get_queue_by_parent_id(
                 process_parent_type,
                 process_parent_id,
             )
 
-            # If the queue is old or doesn't exist, we use a valid one
+            # If the queue is removed, we use a valid one
             # to make sure the request is processed and the restart
             # policy is respected
-            if (
-                not queue_name
-                or queue_name not in settings.RULEBOOK_WORKER_QUEUES
-            ):
+            if queue is None:
                 queue_name = RequestDispatcher.get_most_free_queue_name()
+
+            if queue.state != RQQueueState.AVAILABLE:
+                msg = (
+                    f"Queue {queue.name} is not available. "
+                    f"{process_parent_type} {process_parent_id} "
+                    "is in unknown state. Waiting for readiness."
+                )
+                manager = ActivationManager(
+                    get_process_parent(process_parent_type, process_parent_id),
+                )
+                manager._set_activation_status(ActivationStatus.UNKNOWN, msg)
+                return
+            queue_name = queue.name
 
         unique_enqueue(
             queue_name,
@@ -193,32 +212,18 @@ class RequestDispatcher:
         )
 
     @staticmethod
-    def get_queues() -> list[Queue]:
-        """Return the list of RQ queues configured for podman multinode."""
-        queues = []
-        for queue_name in settings.RULEBOOK_WORKER_QUEUES:
-            try:
-                queues.append(get_queue(queue_name))
-            except KeyError:
-                LOGGER.exception(f"Queue {queue_name} not found")
-                raise QueueNotFoundError(
-                    f"Queue {queue_name} not found"
-                ) from None
-
-        return queues
-
-    @staticmethod
     def get_most_free_queue_name() -> str:
         """Return the queue name with the least running processes."""
-        if not RequestDispatcher.queues:
-            raise QueueNotFoundError("No queues found")
+        queues = models.RQQueue.objects.filter(state=RQQueueState.AVAILABLE)
 
-        if len(RequestDispatcher.queues) == 1:
-            return RequestDispatcher.queues[0].name
+        if not queues:
+            raise QueueNotFoundError("No available queues found")
 
+        if len(queues) == 1:
+            return queues[0].name
         queue_counter = Counter()
 
-        for queue in RequestDispatcher.queues:
+        for queue in queues:
             running_processes_count = models.RulebookProcess.objects.filter(
                 status=ActivationStatus.RUNNING,
                 rulebookprocessqueue__queue_name=queue.name,
@@ -227,10 +232,10 @@ class RequestDispatcher:
         return queue_counter.most_common()[-1][0]
 
     @staticmethod
-    def get_queue_name_by_parent_id(
+    def get_queue_by_parent_id(
         process_parent_type: ProcessParentType,
         process_parent_id: int,
-    ) -> Optional[str]:
+    ) -> Optional[models.RQQueue]:
         """Return the queue name associated with the process ID."""
         try:
             parent_process = get_process_parent(
@@ -253,7 +258,7 @@ class RequestDispatcher:
             ) from None
         if not hasattr(process, "rulebookprocessqueue"):
             return None
-        return process.rulebookprocessqueue.queue_name
+        return process.rulebookprocessqueue.queue
 
 
 # Internal start/restart requests are sent by the manager in restart_helper.py
@@ -344,7 +349,10 @@ def monitor_rulebook_processes() -> None:
 
     # monitor running instances
     for process in models.RulebookProcess.objects.filter(
-        status=ActivationStatus.RUNNING,
+        status__in=[
+            ActivationStatus.UNKNOWN,
+            ActivationStatus.RUNNING,
+        ],
     ):
         process_parent_type = str(process.parent_type)
         if process_parent_type == ProcessParentType.ACTIVATION:

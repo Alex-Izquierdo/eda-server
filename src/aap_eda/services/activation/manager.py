@@ -1102,7 +1102,7 @@ class ActivationManager:
         if running_processes_count >= settings.MAX_RUNNING_ACTIVATIONS:
             LOGGER.info(
                 "No capacity to start a new rulebook process. "
-                f"{parent_type} {parent_id} is postponed",
+                f"{parent_type} {parent_id} is rescheduled",
             )
             return False
         return True

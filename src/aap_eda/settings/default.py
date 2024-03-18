@@ -314,78 +314,14 @@ RQ = {
 # or it has only one queue
 RQ_UNIX_SOCKET_PATH = settings.get("MQ_UNIX_SOCKET_PATH", None)
 
-# A list of queues to be used in multinode mode
-# If the list is empty, use the default singlenode queue name
-RULEBOOK_WORKER_QUEUES = settings.get("RULEBOOK_WORKER_QUEUES", [])
-if isinstance(RULEBOOK_WORKER_QUEUES, str):
-    RULEBOOK_WORKER_QUEUES = RULEBOOK_WORKER_QUEUES.split(",")
-
-if len(set(RULEBOOK_WORKER_QUEUES)) != len(RULEBOOK_WORKER_QUEUES):
-    raise ImproperlyConfigured(
-        "The RULEBOOK_WORKER_QUEUES setting must not contain duplicates."
-    )
-
-# If the list is empty, use the default queue name for single node mode
-if not RULEBOOK_WORKER_QUEUES:
-    RULEBOOK_WORKER_QUEUES = ["activation"]
+RQ_HOST = settings.get("MQ_HOST", "localhost")
+RQ_PORT = settings.get("MQ_PORT", 6379)
 
 DEFAULT_QUEUE_TIMEOUT = 300
 DEFAULT_RULEBOOK_QUEUE_TIMEOUT = 120
 
-
-# TODO(alex): remove two types of queues, it is no longer needed
-# Requires coordination with installer and operator
-def get_rq_queues() -> dict:
-    """Construct the RQ_QUEUES dictionary based on the settings.
-
-    If there is no multinode enabled, the default and activation queues
-    are used. Otherwise, constructs the queues based on the
-    WORKERS_RULEBOOK_QUEUES list.
-    """
-    queues = {}
-
-    # Configures the default queue
-    if RQ_UNIX_SOCKET_PATH:
-        queues["default"] = {
-            "UNIX_SOCKET_PATH": RQ_UNIX_SOCKET_PATH,
-            "DEFAULT_TIMEOUT": DEFAULT_QUEUE_TIMEOUT,
-        }
-    else:
-        queues["default"] = {
-            "HOST": settings.get("MQ_HOST", "localhost"),
-            "PORT": settings.get("MQ_PORT", 6379),
-            "DEFAULT_TIMEOUT": DEFAULT_QUEUE_TIMEOUT,
-        }
-
-    # Configures the activation queue for single node mode
-    if len(RULEBOOK_WORKER_QUEUES) == 1:
-        if RQ_UNIX_SOCKET_PATH:
-            queues[RULEBOOK_WORKER_QUEUES[0]] = {
-                "UNIX_SOCKET_PATH": RQ_UNIX_SOCKET_PATH,
-                "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
-            }
-        else:
-            queues[RULEBOOK_WORKER_QUEUES[0]] = {
-                "HOST": settings.get("MQ_HOST", "localhost"),
-                "PORT": settings.get("MQ_PORT", 6379),
-                "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
-            }
-    # Configure the queues for multinode mode
-    else:
-        for queue in RULEBOOK_WORKER_QUEUES:
-            queues[queue] = {
-                "HOST": settings.get("MQ_HOST", "localhost"),
-                "PORT": settings.get("MQ_PORT", 6379),
-                "DEFAULT_TIMEOUT": DEFAULT_RULEBOOK_QUEUE_TIMEOUT,
-            }
-
-    for queue in queues.values():
-        queue["DB"] = settings.get("MQ_DB", 0)
-
-    return queues
-
-
-RQ_QUEUES = get_rq_queues()
+# Managed after initialization
+RQ_QUEUES = {}
 
 # Queue name for the rulebook workers. To be used in multinode mode
 # Otherwise, the default name is used
