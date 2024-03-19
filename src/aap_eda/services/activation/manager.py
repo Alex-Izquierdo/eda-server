@@ -1066,9 +1066,20 @@ class ActivationManager:
             self._error_activation(msg)
             raise exceptions.ActivationStartError(msg) from exc
         queue_name = self._get_queue_name()
+        try:
+            queue = models.RQQueue.objects.get(name=queue_name)
+        except ObjectDoesNotExist:
+            msg = (
+                f"Activation {self.db_instance.id} failed to create "
+                f"activation instance. Reason: Queue {queue_name} "
+                "not registered."
+            )
+            self._error_activation(msg)
+            self._error_instance(msg)
+            raise exceptions.ActivationStartError(msg) from None
         models.RulebookProcessQueue.objects.create(
             process=rulebook_process,
-            queue_name=queue_name,
+            queue=queue,
         )
 
     def _get_queue_name(self) -> str:
@@ -1096,7 +1107,7 @@ class ActivationManager:
 
         running_processes_count = models.RulebookProcess.objects.filter(
             status=ActivationStatus.RUNNING,
-            rulebookprocessqueue__queue_name=queue_name,
+            rulebookprocessqueue__queue__name=queue_name,
         ).count()
 
         if running_processes_count >= settings.MAX_RUNNING_ACTIVATIONS:

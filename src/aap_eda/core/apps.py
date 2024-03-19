@@ -1,5 +1,10 @@
+import logging
+
 from django.apps import AppConfig
 from django.conf import settings
+from django.db.utils import ProgrammingError
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CoreConfig(AppConfig):
@@ -7,7 +12,16 @@ class CoreConfig(AppConfig):
     name = "aap_eda.core"
 
     def ready(self):
-        settings.RQ_QUEUES = self.get_rq_queues()
+        try:
+            settings.RQ_QUEUES = self.get_rq_queues()
+        except ProgrammingError as exc:
+            if '"core_rq_queue" does not exist' not in str(exc):
+                raise
+            LOGGER.warning(
+                "Error when trying to configure RQ_QUEUES. "
+                "This is expected when running commands if "
+                "multiqueue migration is not yet applied.",
+            )
 
     def get_rq_queues(self):
         """Construct the RQ_QUEUES dictionary based on the settings.
@@ -57,6 +71,6 @@ class CoreConfig(AppConfig):
                 }
 
         for queue in queues.values():
-            queue["DB"] = settings.get("MQ_DB", 0)
+            queue["DB"] = settings.RQ_DB
 
         return queues

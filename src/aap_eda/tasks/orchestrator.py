@@ -174,10 +174,40 @@ class RequestDispatcher:
                 )
                 manager = ActivationManager(
                     get_process_parent(process_parent_type, process_parent_id),
+                    container_engine=10,
                 )
                 manager._set_activation_status(ActivationStatus.PENDING, msg)
                 return
+        elif request_type is ActivationRequest.RESTART:
+            queue = RequestDispatcher.get_queue_by_parent_id(
+                process_parent_type,
+                process_parent_id,
+            )
 
+            # If the queue is removed, we use a valid one
+            # to make sure the request is processed and the restart
+            # policy is respected
+            if queue is None or queue.state != RQQueueState.AVAILABLE:
+                try:
+                    queue_name = RequestDispatcher.get_most_free_queue_name()
+                except QueueNotAvailableError:
+                    msg = (
+                        "No available queues found. "
+                        f"{process_parent_type} {process_parent_id} "
+                        "is rescheduled."
+                    )
+                    manager = ActivationManager(
+                        get_process_parent(
+                            process_parent_type, process_parent_id
+                        ),
+                        container_engine=10,
+                    )
+                    manager._set_activation_status(
+                        ActivationStatus.PENDING, msg
+                    )
+                    return
+            else:
+                queue_name = queue.name
         else:
             queue = RequestDispatcher.get_queue_by_parent_id(
                 process_parent_type,
@@ -190,7 +220,7 @@ class RequestDispatcher:
             if queue is None:
                 queue_name = RequestDispatcher.get_most_free_queue_name()
 
-            if queue.state != RQQueueState.AVAILABLE:
+            elif queue.state != RQQueueState.AVAILABLE:
                 msg = (
                     f"Queue {queue.name} is not available. "
                     f"{process_parent_type} {process_parent_id} "
@@ -198,10 +228,12 @@ class RequestDispatcher:
                 )
                 manager = ActivationManager(
                     get_process_parent(process_parent_type, process_parent_id),
+                    container_engine=10,
                 )
                 manager._set_activation_status(ActivationStatus.UNKNOWN, msg)
                 return
-            queue_name = queue.name
+            else:
+                queue_name = queue.name
 
         unique_enqueue(
             queue_name,
@@ -226,7 +258,7 @@ class RequestDispatcher:
         for queue in queues:
             running_processes_count = models.RulebookProcess.objects.filter(
                 status=ActivationStatus.RUNNING,
-                rulebookprocessqueue__queue_name=queue.name,
+                rulebookprocessqueue__queue__name=queue.name,
             ).count()
             queue_counter[queue.name] = running_processes_count
         return queue_counter.most_common()[-1][0]

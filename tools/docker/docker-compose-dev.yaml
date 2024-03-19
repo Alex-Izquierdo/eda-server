@@ -126,6 +126,8 @@ services:
 
   eda-scheduler:
     image: "${EDA_IMAGE:-localhost/aap-eda}"
+    deploy:
+      replicas: ${EDA_SCHEDULER_WORKERS:-2}
     environment: *common-env
     command:
       - /bin/bash
@@ -136,6 +138,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      eda-api:
         condition: service_healthy
     volumes:
       - '../../:/app/src:z'

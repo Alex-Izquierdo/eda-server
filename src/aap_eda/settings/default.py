@@ -316,6 +316,7 @@ RQ_UNIX_SOCKET_PATH = settings.get("MQ_UNIX_SOCKET_PATH", None)
 
 RQ_HOST = settings.get("MQ_HOST", "localhost")
 RQ_PORT = settings.get("MQ_PORT", 6379)
+RQ_DB = settings.get("MQ_DB", 0)
 
 DEFAULT_QUEUE_TIMEOUT = 300
 DEFAULT_RULEBOOK_QUEUE_TIMEOUT = 120
