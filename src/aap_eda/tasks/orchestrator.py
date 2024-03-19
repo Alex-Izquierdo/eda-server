@@ -147,15 +147,6 @@ class RequestDispatcher:
     enqueueing the RQ task in the right queue.
     """
 
-    _queues = None
-
-    @classmethod
-    @property
-    def queues(cls):
-        if cls._queues is None:
-            cls._queues = cls.get_queues()
-        return cls._queues
-
     @staticmethod
     def dispatch(
         process_parent_type: ProcessParentType,
@@ -210,20 +201,18 @@ class RequestDispatcher:
     @staticmethod
     def get_most_free_queue_name() -> str:
         """Return the queue name with the least running processes."""
-        if not RequestDispatcher.queues:
-            raise QueueNotFoundError("No queues found")
 
-        if len(RequestDispatcher.queues) == 1:
-            return RequestDispatcher.queues[0].name
+        if len(settings.RULEBOOK_WORKER_QUEUES) == 1:
+            return settings.RULEBOOK_WORKER_QUEUES[0]
 
         queue_counter = Counter()
 
-        for queue in RequestDispatcher.queues:
+        for queue_name in settings.RULEBOOK_WORKER_QUEUES:
             running_processes_count = models.RulebookProcess.objects.filter(
                 status=ActivationStatus.RUNNING,
-                rulebookprocessqueue__queue_name=queue.name,
+                rulebookprocessqueue__queue_name=queue_name,
             ).count()
-            queue_counter[queue.name] = running_processes_count
+            queue_counter[queue_name] = running_processes_count
         return queue_counter.most_common()[-1][0]
 
     @staticmethod
