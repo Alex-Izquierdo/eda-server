@@ -12,15 +12,15 @@ def populate_rulebook_process_queue(apps, schema_editor):
         "RulebookProcessQueue",
     )
     RulebookProcess = apps.get_model("core", "RulebookProcess")  # noqa: N806
-    if not RQQueue.objects.filter(name="activation").exists():
-        RQQueue.objects.create(
-            name="activation",
-            state="available",
-        )
-    queue = RQQueue.objects.get(name="activation")
     for running_process in RulebookProcess.objects.filter(
         status="RUNNING",
     ).all():
+        if not RQQueue.objects.filter(name="activation").exists():
+            RQQueue.objects.create(
+                name="activation",
+                state="available",
+            )
+        queue = RQQueue.objects.get(name="activation")
         RulebookProcessQueue.objects.create(
             queue=queue,
             process=running_process,

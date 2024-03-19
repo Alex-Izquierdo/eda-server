@@ -174,11 +174,15 @@ class RequestDispatcher:
                 )
                 manager = ActivationManager(
                     get_process_parent(process_parent_type, process_parent_id),
-                    container_engine=10,
+                    container_engine=object(),
                 )
                 manager._set_activation_status(ActivationStatus.PENDING, msg)
+                LOGGER.info(msg)
                 return
-        elif request_type is ActivationRequest.RESTART:
+            LOGGER.info(
+                f"Dispatching {request_type} {process_parent_type} {process_parent_id} to queue {queue_name}"
+            )
+        elif request_type == ActivationRequest.RESTART:
             queue = RequestDispatcher.get_queue_by_parent_id(
                 process_parent_type,
                 process_parent_id,
@@ -198,16 +202,23 @@ class RequestDispatcher:
                     )
                     manager = ActivationManager(
                         get_process_parent(
-                            process_parent_type, process_parent_id
+                            process_parent_type,
+                            process_parent_id,
                         ),
-                        container_engine=10,
+                        container_engine=object(),
                     )
                     manager._set_activation_status(
-                        ActivationStatus.PENDING, msg
+                        ActivationStatus.PENDING,
+                        msg,
                     )
-                    return
+                    LOGGER.info(msg)
+                    raise Exception(msg)
+
             else:
                 queue_name = queue.name
+            LOGGER.info(
+                f"Dispatching {request_type} {process_parent_type} {process_parent_id} to queue {queue_name}"
+            )
         else:
             queue = RequestDispatcher.get_queue_by_parent_id(
                 process_parent_type,
@@ -228,13 +239,16 @@ class RequestDispatcher:
                 )
                 manager = ActivationManager(
                     get_process_parent(process_parent_type, process_parent_id),
-                    container_engine=10,
+                    container_engine=object(),
                 )
                 manager._set_activation_status(ActivationStatus.UNKNOWN, msg)
+                LOGGER.info(msg)
                 return
             else:
                 queue_name = queue.name
-
+            LOGGER.info(
+                f"Dispatching {request_type} {process_parent_type} {process_parent_id} to queue {queue_name}"
+            )
         unique_enqueue(
             queue_name,
             job_id,
