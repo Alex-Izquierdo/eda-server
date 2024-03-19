@@ -3,12 +3,14 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
+import aap_eda.core.enums
+
 
 def populate_rulebook_process_queue(apps, schema_editor):
     RulebookProcessQueue = apps.get_model("core", "RulebookProcessQueue")
     RulebookProcess = apps.get_model("core", "RulebookProcess")
     for running_process in RulebookProcess.objects.filter(
-        status="RUNNING"
+        status="RUNNING",
     ).all():
         RulebookProcessQueue.objects.create(
             queue_name="activation",
@@ -22,6 +24,66 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name="activation",
+            name="status",
+            field=models.TextField(
+                choices=[
+                    ("starting", "starting"),
+                    ("running", "running"),
+                    ("pending", "pending"),
+                    ("failed", "failed"),
+                    ("stopping", "stopping"),
+                    ("stopped", "stopped"),
+                    ("deleting", "deleting"),
+                    ("completed", "completed"),
+                    ("unresponsive", "unresponsive"),
+                    ("error", "error"),
+                    ("unknown", "unknown"),
+                ],
+                default=aap_eda.core.enums.ActivationStatus["PENDING"],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="eventstream",
+            name="status",
+            field=models.TextField(
+                choices=[
+                    ("starting", "starting"),
+                    ("running", "running"),
+                    ("pending", "pending"),
+                    ("failed", "failed"),
+                    ("stopping", "stopping"),
+                    ("stopped", "stopped"),
+                    ("deleting", "deleting"),
+                    ("completed", "completed"),
+                    ("unresponsive", "unresponsive"),
+                    ("error", "error"),
+                    ("unknown", "unknown"),
+                ],
+                default=aap_eda.core.enums.ActivationStatus["PENDING"],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="rulebookprocess",
+            name="status",
+            field=models.TextField(
+                choices=[
+                    ("starting", "starting"),
+                    ("running", "running"),
+                    ("pending", "pending"),
+                    ("failed", "failed"),
+                    ("stopping", "stopping"),
+                    ("stopped", "stopped"),
+                    ("deleting", "deleting"),
+                    ("completed", "completed"),
+                    ("unresponsive", "unresponsive"),
+                    ("error", "error"),
+                    ("unknown", "unknown"),
+                ],
+                default=aap_eda.core.enums.ActivationStatus["PENDING"],
+            ),
+        ),
         migrations.CreateModel(
             name="RulebookProcessQueue",
             fields=[

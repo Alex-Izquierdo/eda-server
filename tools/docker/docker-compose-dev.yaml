@@ -143,7 +143,7 @@ services:
 
   eda-default-worker:
     deploy:
-      replicas: ${EDA_DEFAULT_WORKERS:-1}
+      replicas: ${EDA_DEFAULT_WORKERS:-2}
     image: "${EDA_IMAGE:-localhost/aap-eda}"
     environment: *common-env
     command:

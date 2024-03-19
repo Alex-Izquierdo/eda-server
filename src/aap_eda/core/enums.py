@@ -77,6 +77,7 @@ class ActivationStatus(DjangoStrEnum):
     # monitor task will handle it
     UNRESPONSIVE = "unresponsive"
     ERROR = "error"
+    UNKNOWN = "unknown"
 
 
 class CredentialType(DjangoStrEnum):

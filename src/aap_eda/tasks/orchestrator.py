@@ -14,12 +14,13 @@
 
 import logging
 from collections import Counter
+from datetime import datetime, timedelta
 from typing import Optional, Union
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django_rq import get_queue
-from rq import get_current_job
+from rq import Worker, get_current_job
 
 import aap_eda.tasks.activation_request_queue as requests_queue
 from aap_eda.core import models
@@ -29,7 +30,7 @@ from aap_eda.core.enums import (
     ProcessParentType,
 )
 from aap_eda.core.models import Activation, ActivationRequestQueue, EventStream
-from aap_eda.core.tasking import Queue, unique_enqueue
+from aap_eda.core.tasking import unique_enqueue
 from aap_eda.services.activation import exceptions
 from aap_eda.services.activation.manager import ActivationManager
 
@@ -174,6 +175,22 @@ class RequestDispatcher:
                 or queue_name not in settings.RULEBOOK_WORKER_QUEUES
             ):
                 queue_name = RequestDispatcher.get_most_free_queue_name()
+            elif not is_rulebook_queue_healthy(queue_name):
+                msg = (
+                    f"Queue {queue_name} is not available. "
+                    f"{process_parent_type} {process_parent_id} "
+                    "is in unknown state. Waiting for readiness."
+                )
+                # TODO: I use an empty container engine because it's not
+                # used to update the status of this case.
+                # This workaround must be revisited
+                manager = ActivationManager(
+                    get_process_parent(process_parent_type, process_parent_id),
+                    container_engine=object(),
+                )
+                manager._set_activation_status(ActivationStatus.UNKNOWN, msg)
+                LOGGER.warning(msg)
+                return
 
         unique_enqueue(
             queue_name,
@@ -182,21 +199,6 @@ class RequestDispatcher:
             process_parent_type,
             process_parent_id,
         )
-
-    @staticmethod
-    def get_queues() -> list[Queue]:
-        """Return the list of RQ queues configured for podman multinode."""
-        queues = []
-        for queue_name in settings.RULEBOOK_WORKER_QUEUES:
-            try:
-                queues.append(get_queue(queue_name))
-            except KeyError:
-                LOGGER.exception(f"Queue {queue_name} not found")
-                raise QueueNotFoundError(
-                    f"Queue {queue_name} not found"
-                ) from None
-
-        return queues
 
     @staticmethod
     def get_most_free_queue_name() -> str:
@@ -208,6 +210,8 @@ class RequestDispatcher:
         queue_counter = Counter()
 
         for queue_name in settings.RULEBOOK_WORKER_QUEUES:
+            if not is_rulebook_queue_healthy(queue_name):
+                continue
             running_processes_count = models.RulebookProcess.objects.filter(
                 status=ActivationStatus.RUNNING,
                 rulebookprocessqueue__queue_name=queue_name,
@@ -333,7 +337,10 @@ def monitor_rulebook_processes() -> None:
 
     # monitor running instances
     for process in models.RulebookProcess.objects.filter(
-        status=ActivationStatus.RUNNING,
+        status_in=[
+            ActivationStatus.RUNNING,
+            ActivationStatus.UNKNOWN,
+        ]
     ):
         process_parent_type = str(process.parent_type)
         if process_parent_type == ProcessParentType.ACTIVATION:
@@ -345,3 +352,29 @@ def monitor_rulebook_processes() -> None:
             process_parent_id,
             None,
         )
+
+
+def is_rulebook_queue_healthy(queue_name: str) -> bool:
+    """Check for the state of the queue.
+
+    Returns True if the queue is healthy, False otherwise.
+    """
+    queue = get_queue(queue_name)
+
+    if Worker.count(queue=queue) <= 0:
+        return False
+
+    all_workers_dead = True
+    for worker in Worker.all(queue=queue):
+        worker.heartbeat()
+        worker.refresh()
+        last_heartbeat = worker.last_heartbeat
+        if last_heartbeat is None:
+            return False
+        threshold = datetime.now() - timedelta(
+            seconds=settings.DEFAULT_WORKER_HEARTBEAT_TIMEOUT,
+        )
+        if last_heartbeat >= threshold:
+            all_workers_dead = False
+
+    return not all_workers_dead
