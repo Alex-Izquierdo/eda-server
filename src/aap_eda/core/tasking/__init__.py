@@ -129,20 +129,20 @@ class DefaultWorker(_Worker):
             serializer = JSONSerializer
 
         super().__init__(
-            queues,
-            name,
-            default_result_ttl,
-            connection,
-            exc_handler,
-            exception_handlers,
-            default_worker_ttl,
-            job_class,
-            queue_class,
-            log_job_description,
-            job_monitoring_interval,
-            disable_default_exception_handler,
-            prepare_for_work,
-            serializer,
+            queues=queues,
+            name=name,
+            default_result_ttl=default_result_ttl,
+            connection=connection,
+            exc_handler=exc_handler,
+            exception_handlers=exception_handlers,
+            default_worker_ttl=default_worker_ttl,
+            job_class=job_class,
+            queue_class=queue_class,
+            log_job_description=log_job_description,
+            job_monitoring_interval=job_monitoring_interval,
+            disable_default_exception_handler=disable_default_exception_handler,  # noqa: E501
+            prepare_for_work=prepare_for_work,
+            serializer=serializer,
         )
 
 
@@ -160,7 +160,7 @@ class ActivationWorker(_Worker):
         connection: Optional[Connection] = None,
         exc_handler: Any = None,
         exception_handlers: _ErrorHandlersArgType = None,
-        default_worker_ttl: int = DEFAULT_WORKER_TTL,
+        default_worker_ttl: int = 10,
         job_class: Type[_Job] = None,
         queue_class: Type[_Queue] = None,
         log_job_description: bool = True,
@@ -179,20 +179,20 @@ class ActivationWorker(_Worker):
         queue_name = settings.RULEBOOK_QUEUE_NAME
 
         super().__init__(
-            [Queue(name=queue_name, connection=connection)],
-            name,
-            default_result_ttl,
-            connection,
-            exc_handler,
-            exception_handlers,
-            default_worker_ttl,
-            job_class,
-            queue_class,
-            log_job_description,
-            job_monitoring_interval,
-            disable_default_exception_handler,
-            prepare_for_work,
-            serializer,
+            queues=[Queue(name=queue_name, connection=connection)],
+            name=name,
+            default_result_ttl=default_result_ttl,
+            connection=connection,
+            exc_handler=exc_handler,
+            exception_handlers=exception_handlers,
+            default_worker_ttl=settings.DEFAULT_WORKER_TTL,
+            job_class=job_class,
+            queue_class=queue_class,
+            log_job_description=log_job_description,
+            job_monitoring_interval=job_monitoring_interval,
+            disable_default_exception_handler=disable_default_exception_handler,  # noqa: E501
+            prepare_for_work=prepare_for_work,
+            serializer=serializer,
         )
 
 

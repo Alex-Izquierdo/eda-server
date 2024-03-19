@@ -217,6 +217,12 @@ class RequestDispatcher:
                 rulebookprocessqueue__queue_name=queue_name,
             ).count()
             queue_counter[queue_name] = running_processes_count
+
+        if not queue_counter:
+            raise QueueNotFoundError(
+                "No healthy queue found to dispatch the request",
+            )
+
         return queue_counter.most_common()[-1][0]
 
     @staticmethod
@@ -337,7 +343,7 @@ def monitor_rulebook_processes() -> None:
 
     # monitor running instances
     for process in models.RulebookProcess.objects.filter(
-        status_in=[
+        status__in=[
             ActivationStatus.RUNNING,
             ActivationStatus.UNKNOWN,
         ]
@@ -366,15 +372,18 @@ def is_rulebook_queue_healthy(queue_name: str) -> bool:
 
     all_workers_dead = True
     for worker in Worker.all(queue=queue):
-        worker.heartbeat()
-        worker.refresh()
         last_heartbeat = worker.last_heartbeat
         if last_heartbeat is None:
-            return False
+            continue
         threshold = datetime.now() - timedelta(
             seconds=settings.DEFAULT_WORKER_HEARTBEAT_TIMEOUT,
         )
         if last_heartbeat >= threshold:
             all_workers_dead = False
+            break
 
-    return not all_workers_dead
+    if all_workers_dead:
+        queue.empty()
+        return False
+
+    return True

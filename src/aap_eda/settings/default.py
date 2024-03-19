@@ -334,7 +334,8 @@ DEFAULT_RULEBOOK_QUEUE_TIMEOUT = 120
 
 # Time window in seconds to consider a worker as dead
 # DEFAULT_WORKER_HEARTBEAT_TIMEOUT = 300
-DEFAULT_WORKER_HEARTBEAT_TIMEOUT = 5
+DEFAULT_WORKER_HEARTBEAT_TIMEOUT = 10
+DEFAULT_WORKER_TTL = 5
 
 
 # TODO(alex): remove two types of queues, it is no longer needed
