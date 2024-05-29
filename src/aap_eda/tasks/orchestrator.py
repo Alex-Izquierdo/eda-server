@@ -124,11 +124,12 @@ def _run_request(
     )
     start_commands = [ActivationRequest.START, ActivationRequest.AUTO_START]
     manager = ActivationManager(process_parent)
-    if (
-        request.request in start_commands
-        and not manager.check_new_process_allowed()
-    ):
-        return False
+    if request.request in start_commands:
+        import random
+
+        time.sleep(random.randint(2, 5))
+        if not manager.check_new_process_allowed():
+            return False
 
     try:
         if request.request in start_commands:
@@ -472,18 +473,7 @@ def monitor_rulebook_processes() -> None:
     activation.
     """
     # run pending user requests
-    add_delay = False
     for request in requests_queue.list_requests():
-        if request.request in [
-            ActivationRequest.START,
-            ActivationRequest.AUTO_START,
-        ]:
-            if add_delay:
-                # Add a delay to avoid starting all processes at once
-                time.sleep(3)
-            else:
-                add_delay = True
-
         dispatch(
             request.process_parent_type,
             request.process_parent_id,
