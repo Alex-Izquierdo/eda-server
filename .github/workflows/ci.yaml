@@ -4,6 +4,7 @@ env:
   POETRY_NO_INTERACTION: 1
 
 on:
+  workflow_call:
   push:
     branches: [ 'main' ]
   pull_request:
