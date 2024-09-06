@@ -1,0 +1,92 @@
+name: Periodic Poetry Lock and Merge
+
+on:
+  schedule:
+    - cron: "0 9 * * *"  # UTC time, runs every day at 9:00 AM
+
+jobs:
+  autoupdate-poetry-lock:
+    runs-on: ubuntu-latest
+    outputs:
+      lock-changed: ${{ steps.lock-changed.outputs.lock-changed }}
+    steps:
+      # Checkout the main branch
+      - name: Checkout main branch
+        uses: actions/checkout@v3
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"  # Set your preferred Python version
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Run poetry lock
+        run: poetry lock --no-update
+
+      - name: Check if lock file changed
+        id: lock-changed
+        run: |
+          if git diff --exit-code poetry.lock; then
+            echo "No changes detected"
+            echo "lock-changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected"
+            echo "lock-changed=true" >> $GITHUB_OUTPUT
+
+      - name: Delete branch if it exists
+        if: steps.lock-changed.outputs.lock-changed == 'true'
+        run: |
+          if git ls-remote --exit-code --heads origin autoupdate-poetry-lock; then
+            git push origin --delete autoupdate-poetry-lock
+          fi
+
+      - name: Push changes
+        if: steps.lock-changed.outputs.lock-changed == 'true'
+        run: |
+          git checkout -b autoupdate-poetry-lock
+          git add poetry.lock
+          git commit -m "ci(bot): update poetry lock file"
+          git push origin autoupdate-poetry-lock --force
+
+  # Trigger tests if the lock file changed
+  trigger-ci:
+    if: needs.autoupdate-poetry-lock.outputs.lock-changed == 'true'
+    needs:
+      - autoupdate-poetry-lock
+    uses: ./.github/workflows/ci.yaml
+
+  trigger-e2e:
+    if: needs.autoupdate-poetry-lock.outputs.lock-changed == 'true'
+    needs:
+      - autoupdate-poetry-lock
+    uses: ./.github/workflows/e2e-dispatch.yml
+
+
+  # Create Pull Request and auto-merge if all checks pass
+  create-pr:
+    needs:
+      - trigger-ci
+      - trigger-e2e
+      - autoupdate-poetry-lock
+    if: needs.autoupdate-poetry-lock.outputs.lock-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout autoupdate-poetry-lock branch
+        uses: actions/checkout@v3
+        with:
+          ref: autoupdate-poetry-lock
+
+      - name: Create a Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: autoupdate-poetry-lock
+          base: main
+          title: "ci(bot): autopdate poetry lock file"
+          body: "This PR updates the poetry lock file with the latest changes."
