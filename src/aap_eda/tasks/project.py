@@ -21,14 +21,13 @@ from aap_eda.core import models, tasking
 from aap_eda.services.project import ProjectImportError, ProjectImportService
 
 logger = logging.getLogger(__name__)
-PROJECT_TASKS_QUEUE = "default"
+PROJECT_TASKS_QUEUE = "eda_workers"
 
 # Wrap the django_rq job decorator so its processing is within our retry
 # code.
-job = tasking.redis_connect_retry()(django_rq.job)
 
 
-@job(PROJECT_TASKS_QUEUE)
+# TODO: the dispatcher task decorator has pending fixes, use that when available
 def import_project(project_id: int):
     logger.info(f"Task started: Import project ( {project_id=} )")
 
@@ -41,7 +40,6 @@ def import_project(project_id: int):
     logger.info(f"Task complete: Import project ( project_id={project.id} )")
 
 
-@job(PROJECT_TASKS_QUEUE)
 def sync_project(project_id: int):
     logger.info(f"Task started: Sync project ( {project_id=} )")
 

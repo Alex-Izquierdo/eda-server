@@ -133,7 +133,12 @@ class ProjectViewSet(
                     request.user, serializer.instance
                 )
 
-                job = tasks.import_project.delay(project_id=project.id)
+                # TODO: old contract will work fine some day
+                from aap_eda.core.tasking import unique_enqueue
+                from uuid import uuid4
+                job_id = str(uuid4())
+                unique_enqueue('eda_workers', job_id, 'aap_eda.tasks.import_project', project.id)
+                # job = tasks.import_project.delay(project_id=project.id)
         except redis.ConnectionError:
             # If Redis isn't available we'll generate a Conflict (409).
             # Anything else we re-raise the exception.
@@ -142,9 +147,9 @@ class ProjectViewSet(
 
         # Atomically update `import_task_id` field only.
         models.Project.objects.filter(pk=project.id).update(
-            import_task_id=job.id
+            import_task_id=job_id
         )
-        project.import_task_id = job.id
+        project.import_task_id = job_id
         serializer = self.get_serializer(project)
         headers = self.get_success_headers(serializer.data)
         logger.info(

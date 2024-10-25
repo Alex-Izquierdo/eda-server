@@ -43,6 +43,11 @@ As an outcome of running this, you should see DEBUG level logs showing what happ
 2024-10-25 18:34:21,163 dispatcher.pool DEBUG    Task completed by worker 0: None
 ```
 
+#### Plugging in Schedules
+
+The setting `CELERYBEAT_SCHEDULE` is replaced with `CELERYBEAT_SCHEDULE`,
+reflecting patterns in RQ worker vs dispatcher.
+
 #### Substutiting RQ Workers with Dispatchers
 
 This phase will replace calls to RQ Worker, both on the producer and consumer sides,

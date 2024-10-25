@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Run the worker dispatcher."
+    help = "Run the activation worker dispatcher."
 
     # # TODO: stuff to support this isn't in yet
     # def add_arguments(self, parser):
@@ -43,9 +43,10 @@ class Command(BaseCommand):
             "producers": {
                 "brokers": {
                     "pg_notify": {"conninfo": CONNECTION_STRING},
-                    "channels": ["eda_workers"],
+                    "channels": [settings.RULEBOOK_QUEUE_NAME],
                 },
-                "scheduled": settings.CELERYBEAT_SCHEDULE,
+                # NOTE: I would prefer to move the activation monitoring schedule from worker to activation, but that is more work
+                "scheduled": {},
             },
             "pool": {"max_workers": 4},
         }
