@@ -604,6 +604,11 @@ LOGGING = {
             "level": APP_LOG_LEVEL,
             "propagate": False,
         },
+        "dispatcher": {
+            "handlers": ["console"],
+            "level": "DEBUG",  # TODO: this is for demo!!
+            "propagate": False,
+        }
     },
 }
 

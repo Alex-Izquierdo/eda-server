@@ -67,6 +67,11 @@ RUN for dir in \
     /app/venv/bin ; \
     do mkdir -m 0775 -p $dir ; chmod g+rwx $dir ; chgrp root $dir ; done
 
+
+# This repo is not yet fully published, so you need a local checkout for the demo phase
+RUN pip install -e $SOURCES_DIR/dispatcher
+
+
 USER "$USER_ID"
 
 CMD ["aap-eda-manage", "runserver", "0.0.0.0:8000"]
