@@ -603,6 +603,10 @@ def unique_enqueue(queue_name: str, job_id: str, *args, **kwargs) -> Job:
     pg_notify is essentially always broadcast.
     """
     task_name = args[0]
+    if isinstance(task_name, str):
+        pass  # this is how we want it
+    elif callable(task_name):
+        task_name = f'{task_name.__module__}.{task_name.__name__}'
     # task_name is RQ worker, task by itself is AWX dispatcher
     payload = {
         'task_name': task_name,
@@ -611,7 +615,8 @@ def unique_enqueue(queue_name: str, job_id: str, *args, **kwargs) -> Job:
         'args': args[1:]  # little sketchy about how reliable this is
     }
     message = json.dumps(payload)
-    publish_message(queue_name, message)
+    # TODO: sanitize or escape channel names on dispatcher side
+    publish_message(queue_name.replace('-', '_'), message)
 
 
 @redis_connect_retry()

@@ -43,7 +43,8 @@ class Command(BaseCommand):
             "producers": {
                 "brokers": {
                     "pg_notify": {"conninfo": CONNECTION_STRING},
-                    "channels": [settings.RULEBOOK_QUEUE_NAME],
+                    # TODO: sanitize or escape channel names on dispatcher side
+                    "channels": [settings.RULEBOOK_QUEUE_NAME.replace('-', '_')],
                 },
                 # NOTE: I would prefer to move the activation monitoring schedule from worker to activation, but that is more work
                 "scheduled": {},
