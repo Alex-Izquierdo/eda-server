@@ -18,7 +18,6 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Optional
 
-import django_rq
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 
