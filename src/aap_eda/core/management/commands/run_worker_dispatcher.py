@@ -12,7 +12,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-from datetime import timedelta
 import asyncio
 import logging
 
@@ -33,16 +32,12 @@ class Command(BaseCommand):
     #     parser.add_argument('--status', dest='status', action='store_true', help='print the internal state of any running dispatchers')
 
     def handle(self, *args, **options):
-        db_config = settings.DATABASES['default']
-
-        CONNECTION_STRING = f"dbname={db_config['NAME']} user={db_config['USER']} password={db_config['PASSWORD']} host={db_config['HOST']} port={db_config['PORT']}"
-
         # NOTE: using a channel named literally "default" will give a postgres SynaxError.
         # It seems to be some kind of reserved variable name in postgres.
         dispatcher_config = {
             "producers": {
                 "brokers": {
-                    "pg_notify": {"conninfo": CONNECTION_STRING},
+                    "pg_notify": {"conninfo": settings.PG_NOTIFY_DSN_SERVER},
                     "channels": ["eda_workers"],
                 },
                 "scheduled": settings.CELERYBEAT_SCHEDULE,
