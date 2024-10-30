@@ -302,9 +302,10 @@ def dispatch(
         #         )
         #         return
 
+    # TODO: sanitize or escape channel names on dispatcher side
     _manage.apply_async(
         args=[process_parent_type, process_parent_id],
-        queue=queue_name,
+        queue=queue_name.replace('-', '_'),
         uuid=job_id
     )
 
@@ -406,6 +407,8 @@ def start_rulebook_process(
         process_parent_id,
         ActivationRequest.START,
     )
+    # Schedule would pick this up, but this makes things move faster
+    monitor_rulebook_processes.delay()
 
 
 def stop_rulebook_process(
@@ -418,6 +421,7 @@ def stop_rulebook_process(
         process_parent_id,
         ActivationRequest.STOP,
     )
+    monitor_rulebook_processes.delay()
 
 
 def delete_rulebook_process(
@@ -447,8 +451,10 @@ def restart_rulebook_process(
         process_parent_id,
         ActivationRequest.RESTART,
     )
+    monitor_rulebook_processes.delay()
 
 
+@task(queue='eda_workers')
 def monitor_rulebook_processes() -> None:
     """Monitor activations scheduled task.
 

@@ -27,7 +27,7 @@ aap-eda-manage shell_plus
 ```python
 from dispatcher.brokers.pg_notify import publish_message
 
-publish_message("default", "aap_eda.tasks.orchestrator.monitor_rulebook_processes")
+publish_message("eda_workers", "aap_eda.tasks.orchestrator.monitor_rulebook_processes")
 ```
 
 As an outcome of running this, you should see DEBUG level logs showing what happened in the 1st tab.

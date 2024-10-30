@@ -136,9 +136,7 @@ class ProjectViewSet(
                 job_data, _ = tasks.import_project.delay(project_id=project.id)
                 job_id = job_data['uuid']
         except redis.ConnectionError:
-            # If Redis isn't available we'll generate a Conflict (409).
-            # Anything else we re-raise the exception.
-            self.redis_is_available()
+            # TODO: remove try-except block
             raise
 
         # Atomically update `import_task_id` field only.
@@ -294,9 +292,7 @@ class ProjectViewSet(
         try:
             job = tasks.sync_project.delay(project_id=project.id)
         except redis.ConnectionError:
-            # If Redis isn't available we'll generate a Conflict (409).
-            # Anything else we re-raise the exception.
-            self.redis_is_available()
+            # TODO: remove try-except block
             raise
 
         project.import_state = models.Project.ImportState.PENDING
