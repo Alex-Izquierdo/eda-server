@@ -134,7 +134,7 @@ class ProjectViewSet(
                 )
 
                 job_data, _ = tasks.import_project.delay(project_id=project.id)
-                job_id = job_data['uuid']
+                job_id = job_data["uuid"]
         except redis.ConnectionError:
             # TODO: remove try-except block
             raise
