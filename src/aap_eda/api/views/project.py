@@ -133,12 +133,8 @@ class ProjectViewSet(
                     request.user, serializer.instance
                 )
 
-                # TODO: old contract will work fine some day
-                from aap_eda.core.tasking import unique_enqueue
-                from uuid import uuid4
-                job_id = str(uuid4())
-                unique_enqueue('eda_workers', job_id, 'aap_eda.tasks.import_project', project.id)
-                # job = tasks.import_project.delay(project_id=project.id)
+                job_data, _ = tasks.import_project.delay(project_id=project.id)
+                job_id = job_data['uuid']
         except redis.ConnectionError:
             # If Redis isn't available we'll generate a Conflict (409).
             # Anything else we re-raise the exception.

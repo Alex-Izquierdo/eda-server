@@ -14,6 +14,8 @@
 
 import logging
 
+from dispatcher.publish import task
+
 import django_rq
 from django.conf import settings
 
@@ -27,7 +29,7 @@ PROJECT_TASKS_QUEUE = "eda_workers"
 # code.
 
 
-# TODO: the dispatcher task decorator has pending fixes, use that when available
+@task(queue='eda_workers')
 def import_project(project_id: int):
     logger.info(f"Task started: Import project ( {project_id=} )")
 
@@ -40,6 +42,7 @@ def import_project(project_id: int):
     logger.info(f"Task complete: Import project ( project_id={project.id} )")
 
 
+@task(queue='eda_workers')
 def sync_project(project_id: int):
     logger.info(f"Task started: Sync project ( {project_id=} )")
 
@@ -66,6 +69,7 @@ def monitor_project_tasks(queue_name: str = PROJECT_TASKS_QUEUE):
 # redis_connect_retry to maintain the model that anything directly dependent on
 # a Redis connection is wrapped by retries.
 @tasking.redis_connect_retry()
+@task(queue='eda_workers')
 def _monitor_project_tasks(queue_name: str) -> None:
     """Handle project tasks that are stuck.
 
