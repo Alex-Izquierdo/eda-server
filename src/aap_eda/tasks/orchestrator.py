@@ -15,14 +15,15 @@
 import logging
 import random
 from collections import Counter
-from datetime import datetime, timedelta
 from typing import Optional
+
+from dispatcher.publish import task
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 
 import aap_eda.tasks.activation_request_queue as requests_queue
-from aap_eda.core import models, tasking
+from aap_eda.core import models
 from aap_eda.core.enums import (
     ActivationRequest,
     ActivationStatus,
@@ -65,6 +66,7 @@ def get_process_parent(
     return klass.objects.get(id=parent_id)
 
 
+@task(queue="eda_workers")
 def _manage(process_parent_type: str, id: int) -> None:
     """Manage the activation with the given id.
 
@@ -300,12 +302,10 @@ def dispatch(
         #         )
         #         return
 
-    tasking.unique_enqueue(
-        queue_name,
-        job_id,
-        _manage,
-        process_parent_type,
-        process_parent_id,
+    _manage.apply_async(
+        args=[process_parent_type, process_parent_id],
+        queue=queue_name,
+        uuid=job_id
     )
 
 
