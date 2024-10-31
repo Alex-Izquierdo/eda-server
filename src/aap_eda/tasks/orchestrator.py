@@ -311,12 +311,15 @@ def dispatch(
                 )
                 return
 
-    # TODO: sanitize or escape channel names on dispatcher side
-    _manage.apply_async(
-        args=[process_parent_type, process_parent_id],
-        queue=queue_name.replace('-', '_'),
-        uuid=job_id
-    )
+    with advisory_lock(job_id) as acquired:
+        if not acquired:
+            return
+        # TODO: sanitize or escape channel names on dispatcher side
+        _manage.apply_async(
+            args=[process_parent_type, process_parent_id],
+            queue=queue_name.replace("-", "_"),
+            uuid=job_id,
+        )
 
 
 def get_least_busy_queue_name() -> str:
@@ -381,8 +384,11 @@ def check_rulebook_queue_health(queue_name: str) -> bool:
     Returns True if the queue is healthy, False otherwise.
     Clears the queue if all workers are dead to avoid stuck processes.
     """
-    ctl = Control(queue_name.replace('-', '_'), config={'conninfo': settings.PG_NOTIFY_DSN_SERVER})
-    alive = ctl.control_with_reply('alive')
+    ctl = Control(
+        queue_name.replace("-", "_"),
+        config={"conninfo": settings.PG_NOTIFY_DSN_SERVER},
+    )
+    alive = ctl.control_with_reply("alive")
     return bool(alive)
 
 
@@ -424,11 +430,8 @@ def delete_rulebook_process(
         process_parent_id,
         ActivationRequest.DELETE,
     )
-    dispatch(
-        process_parent_type,
-        process_parent_id,
-        ActivationRequest.DELETE,
-    )
+    # Schedule would pick this up, but this makes things move faster
+    monitor_rulebook_processes.delay()
 
 
 def restart_rulebook_process(
@@ -479,9 +482,9 @@ def monitor_rulebook_processes_no_lock() -> None:
         )
 
 
-@task(queue='eda_workers')
+@task(queue="eda_workers")
 def monitor_rulebook_processes() -> None:
-    with advisory_lock('monitor_rulebook_processes') as acquired:
+    with advisory_lock("monitor_rulebook_processes") as acquired:
         if not acquired:
             return
 
