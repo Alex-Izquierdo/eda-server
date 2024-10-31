@@ -53,7 +53,7 @@ def sync_project(project_id: int):
 
 
 @task(queue=PROJECT_TASKS_QUEUE)
-def _monitor_project_tasks(queue_name: str) -> None:
+def _monitor_project_tasks() -> None:
     """Handle project tasks that are stuck.
 
     Check if there are projects in PENDING state that doesn't have
