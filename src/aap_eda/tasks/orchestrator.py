@@ -68,8 +68,7 @@ def get_process_parent(
     return klass.objects.get(id=parent_id)
 
 
-@task(queue="eda_workers")
-def _manage(process_parent_type: str, id: int) -> None:
+def _manage_no_lock(process_parent_type: str, id: int) -> None:
     """Manage the activation with the given id.
 
     It will run pending user requests or monitor the activation
@@ -106,6 +105,15 @@ def _manage(process_parent_type: str, id: int) -> None:
             f"Processing monitor request for {process_parent_type} {id}",
         )
         ActivationManager(process_parent).monitor()
+
+
+@task(queue="eda_workers")
+def _manage(process_parent_type: str, id: int) -> None:
+    with advisory_lock(_manage_process_job_id(process_parent_type, id)) as acquired:
+        if not acquired:
+            return
+
+        _manage_no_lock(process_parent_type, id)
 
 
 def _run_request(
