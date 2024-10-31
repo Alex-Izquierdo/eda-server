@@ -36,6 +36,7 @@ from aap_eda.services.activation.activation_manager import (
     ActivationManager,
     StatusManager,
 )
+from aap_eda.utils.advisory_lock import advisory_lock
 
 from .exceptions import UnknownProcessParentType
 
@@ -435,8 +436,7 @@ def restart_rulebook_process(
     monitor_rulebook_processes.delay()
 
 
-@task(queue='eda_workers')
-def monitor_rulebook_processes() -> None:
+def monitor_rulebook_processes_no_lock() -> None:
     """Monitor activations scheduled task.
 
     Started by the scheduler, executed by the default worker.
@@ -469,3 +469,12 @@ def monitor_rulebook_processes() -> None:
             process_parent_id,
             None,
         )
+
+
+@task(queue='eda_workers')
+def monitor_rulebook_processes() -> None:
+    with advisory_lock('monitor_rulebook_processes') as acquired:
+        if not acquired:
+            return
+
+        monitor_rulebook_processes_no_lock()

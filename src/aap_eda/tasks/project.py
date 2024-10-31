@@ -21,6 +21,7 @@ from django.conf import settings
 
 from aap_eda.core import models
 from aap_eda.services.project import ProjectImportError, ProjectImportService
+from aap_eda.utils.advisory_lock import advisory_lock
 
 logger = logging.getLogger(__name__)
 PROJECT_TASKS_QUEUE = "eda_workers"
@@ -28,32 +29,39 @@ PROJECT_TASKS_QUEUE = "eda_workers"
 
 @task(queue=PROJECT_TASKS_QUEUE)
 def import_project(project_id: int):
-    logger.info(f"Task started: Import project ( {project_id=} )")
+    with advisory_lock(f'import_project_{project_id}', wait=False) as acquired:
+        if not acquired:
+            return
 
-    project = models.Project.objects.get(pk=project_id)
-    try:
-        ProjectImportService().import_project(project)
-    except ProjectImportError as e:
-        logger.error(e, exc_info=settings.DEBUG)
+        logger.info(f"Task started: Import project ( {project_id=} )")
 
-    logger.info(f"Task complete: Import project ( project_id={project.id} )")
+        project = models.Project.objects.get(pk=project_id)
+        try:
+            ProjectImportService().import_project(project)
+        except ProjectImportError as e:
+            logger.error(e, exc_info=settings.DEBUG)
+
+        logger.info(f"Task complete: Import project ( project_id={project.id} )")
 
 
 @task(queue=PROJECT_TASKS_QUEUE)
 def sync_project(project_id: int):
-    logger.info(f"Task started: Sync project ( {project_id=} )")
+    with advisory_lock(f'import_project_{project_id}', wait=False) as acquired:
+        if not acquired:
+            return
 
-    project = models.Project.objects.get(pk=project_id)
-    try:
-        ProjectImportService().sync_project(project)
-    except ProjectImportError as e:
-        logger.error(e, exc_info=settings.DEBUG)
+        logger.info(f"Task started: Sync project ( {project_id=} )")
 
-    logger.info(f"Task complete: Sync project ( project_id={project.id} )")
+        project = models.Project.objects.get(pk=project_id)
+        try:
+            ProjectImportService().sync_project(project)
+        except ProjectImportError as e:
+            logger.error(e, exc_info=settings.DEBUG)
+
+        logger.info(f"Task complete: Sync project ( project_id={project.id} )")
 
 
-@task(queue=PROJECT_TASKS_QUEUE)
-def _monitor_project_tasks() -> None:
+def _monitor_project_tasks_no_lock() -> None:
     """Handle project tasks that are stuck.
 
     Check if there are projects in PENDING state that doesn't have
@@ -91,3 +99,12 @@ def _monitor_project_tasks() -> None:
         project.save(update_fields=["import_task_id", "modified_at"])
 
     logger.info("Task complete: Monitor project tasks")
+
+
+@task(queue=PROJECT_TASKS_QUEUE)
+def _monitor_project_tasks() -> None:
+    with advisory_lock('monitor_project_tasks', wait=False) as acquired:
+        if not acquired:
+            return
+
+        _monitor_project_tasks_no_lock
