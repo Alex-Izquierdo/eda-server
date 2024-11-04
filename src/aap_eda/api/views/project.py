@@ -279,10 +279,10 @@ class ProjectViewSet(
                 detail="Project import or sync is already running."
             )
 
-        job = tasks.sync_project.delay(project_id=project.id)
+        job_data, _ = tasks.sync_project.delay(project_id=project.id)
 
         project.import_state = models.Project.ImportState.PENDING
-        project.import_task_id = job.id
+        project.import_task_id = job_data["uuid"]
         project.import_error = None
         project.save()
 
